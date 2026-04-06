@@ -1,0 +1,296 @@
+const express = require('express');
+const cors = require('cors');
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Banco de dados
+const db = new sqlite3.Database('./presenca.db');
+
+// Criar tabelas
+db.serialize(() => {
+  // Rede Wi-Fi configurada
+  db.run(`
+    CREATE TABLE IF NOT EXISTS wifi_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ssid TEXT NOT NULL,
+      password TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Dispositivos (alunos)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS dispositivos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome_aluno TEXT NOT NULL,
+      matricula TEXT UNIQUE NOT NULL,
+      mac_address TEXT UNIQUE NOT NULL,
+      ativo BOOLEAN DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Registros de presença
+  db.run(`
+    CREATE TABLE IF NOT EXISTS registros_presenca (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispositivo_id INTEGER,
+      data_conexao DATE DEFAULT CURRENT_DATE,
+      hora_conexao TIME DEFAULT CURRENT_TIME,
+      tempo_conectado INTEGER,
+      status TEXT DEFAULT 'presente',
+      FOREIGN KEY(dispositivo_id) REFERENCES dispositivos(id)
+    )
+  `);
+
+  // Registros manuais
+  db.run(`
+    CREATE TABLE IF NOT EXISTS registros_manuais (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome_aluno TEXT NOT NULL,
+      matricula TEXT NOT NULL,
+      data_registro DATE DEFAULT CURRENT_DATE,
+      hora_registro TIME DEFAULT CURRENT_TIME,
+      admin_nome TEXT NOT NULL,
+      motivo TEXT
+    )
+  `);
+
+  // Administradores
+  db.run(`
+    CREATE TABLE IF NOT EXISTS administradores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      nome_completo TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Inserir admin padrão (senha: admin123)
+  const adminPassword = bcrypt.hashSync('admin123', 10);
+  db.run(`INSERT OR IGNORE INTO administradores (username, password_hash, nome_completo) VALUES (?, ?, ?)`, 
+    ['admin', adminPassword, 'Administrador Master']);
+});
+
+// ============ ROTAS ============
+
+// Middleware de autenticação
+const authMiddleware = (req, res, next) => {
+  const token = req.headers['authorization'];
+  if (!token) return res.status(401).json({ error: 'Token não fornecido' });
+  
+  jwt.verify(token, 'secret_key_2024', (err, decoded) => {
+    if (err) return res.status(401).json({ error: 'Token inválido' });
+    req.adminId = decoded.id;
+    next();
+  });
+};
+
+// Login admin
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  
+  db.get('SELECT * FROM administradores WHERE username = ?', [username], async (err, admin) => {
+    if (err || !admin) return res.status(401).json({ error: 'Credenciais inválidas' });
+    
+    const validPassword = await bcrypt.compare(password, admin.password_hash);
+    if (!validPassword) return res.status(401).json({ error: 'Credenciais inválidas' });
+    
+    const token = jwt.sign({ id: admin.id, username: admin.username }, 'secret_key_2024', { expiresIn: '24h' });
+    res.json({ token, admin: { id: admin.id, username: admin.username, nome: admin.nome_completo } });
+  });
+});
+
+// Configurar Wi-Fi
+app.post('/api/wifi/config', authMiddleware, (req, res) => {
+  const { ssid, password } = req.body;
+  
+  db.run('DELETE FROM wifi_config', () => {
+    db.run('INSERT INTO wifi_config (ssid, password) VALUES (?, ?)', [ssid, password], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: this.lastID, ssid, message: 'Wi-Fi configurado com sucesso' });
+    });
+  });
+});
+
+// Obter configuração Wi-Fi
+app.get('/api/wifi/config', (req, res) => {
+  db.get('SELECT * FROM wifi_config ORDER BY id DESC LIMIT 1', (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(row || {});
+  });
+});
+
+// Cadastrar dispositivo (aluno)
+app.post('/api/dispositivos', authMiddleware, (req, res) => {
+  const { nome_aluno, matricula, mac_address } = req.body;
+  
+  db.run('INSERT INTO dispositivos (nome_aluno, matricula, mac_address) VALUES (?, ?, ?)',
+    [nome_aluno, matricula, mac_address],
+    function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: this.lastID, nome_aluno, matricula, mac_address });
+    });
+});
+
+// Listar dispositivos
+app.get('/api/dispositivos', (req, res) => {
+  db.all('SELECT * FROM dispositivos WHERE ativo = 1 ORDER BY nome_aluno', (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// Registrar presença via Wi-Fi
+app.post('/api/presenca/wifi', (req, res) => {
+  const { mac_address, tempo_conectado } = req.body;
+  const hoje = new Date().toISOString().split('T')[0];
+  const agora = new Date().toTimeString().split(' ')[0];
+  
+  // Buscar dispositivo pelo MAC
+  db.get('SELECT id FROM dispositivos WHERE mac_address = ? AND ativo = 1', [mac_address], (err, dispositivo) => {
+    if (err || !dispositivo) {
+      return res.status(404).json({ error: 'Dispositivo não cadastrado' });
+    }
+    
+    // Verificar se já registrou presença hoje
+    db.get('SELECT id FROM registros_presenca WHERE dispositivo_id = ? AND data_conexao = ?', 
+      [dispositivo.id, hoje], (err, registroExistente) => {
+      
+      if (registroExistente) {
+        return res.json({ message: 'Presença já registrada hoje', status: 'duplicado' });
+      }
+      
+      // Registrar nova presença
+      db.run('INSERT INTO registros_presenca (dispositivo_id, data_conexao, hora_conexao, tempo_conectado) VALUES (?, ?, ?, ?)',
+        [dispositivo.id, hoje, agora, tempo_conectado || 0],
+        function(err) {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ id: this.lastID, message: 'Presença registrada com sucesso', status: 'registrado' });
+        });
+    });
+  });
+});
+
+// Registro manual (admin)
+app.post('/api/presenca/manual', authMiddleware, (req, res) => {
+  const { nome_aluno, matricula, motivo } = req.body;
+  const hoje = new Date().toISOString().split('T')[0];
+  const agora = new Date().toTimeString().split(' ')[0];
+  
+  db.get('SELECT nome_completo FROM administradores WHERE id = ?', [req.adminId], (err, admin) => {
+    if (err) return res.status(500).json({ error: err.message });
+    
+    db.run(`INSERT INTO registros_manuais (nome_aluno, matricula, data_registro, hora_registro, admin_nome, motivo) 
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      [nome_aluno, matricula, hoje, agora, admin.nome_completo, motivo || 'Registro manual'],
+      function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ id: this.lastID, message: 'Presença registrada manualmente' });
+      });
+  });
+});
+
+// Relatório de presenças
+app.get('/api/relatorio/presencas', (req, res) => {
+  const { data_inicio, data_fim } = req.query;
+  
+  let query = `
+    SELECT d.nome_aluno, d.matricula, rp.data_conexao, rp.hora_conexao, rp.tempo_conectado
+    FROM registros_presenca rp
+    JOIN dispositivos d ON d.id = rp.dispositivo_id
+  `;
+  
+  const params = [];
+  if (data_inicio && data_fim) {
+    query += ` WHERE rp.data_conexao BETWEEN ? AND ?`;
+    params.push(data_inicio, data_fim);
+  }
+  
+  query += ` ORDER BY rp.data_conexao DESC, rp.hora_conexao DESC`;
+  
+  db.all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// Dashboard stats
+app.get('/api/dashboard/stats', (req, res) => {
+  const hoje = new Date().toISOString().split('T')[0];
+  
+  db.get('SELECT COUNT(*) as total_dispositivos FROM dispositivos WHERE ativo = 1', (err, totalDispositivos) => {
+    db.get('SELECT COUNT(*) as presentes_hoje FROM registros_presenca WHERE data_conexao = ?', [hoje], (err, presentesHoje) => {
+      db.get('SELECT COUNT(*) as registros_manuais_hoje FROM registros_manuais WHERE data_registro = ?', [hoje], (err, manuaisHoje) => {
+        res.json({
+          total_dispositivos: totalDispositivos.total_dispositivos,
+          presentes_hoje: presentesHoje.presentes_hoje,
+          registros_manuais_hoje: manuaisHoje.registros_manuais_hoje
+        });
+      });
+    });
+  });
+});
+
+// Editar dispositivo
+app.put('/api/dispositivos/:id', authMiddleware, (req, res) => {
+  const { nome_aluno, matricula, mac_address } = req.body;
+  const { id } = req.params;
+  
+  db.run('UPDATE dispositivos SET nome_aluno = ?, matricula = ?, mac_address = ? WHERE id = ?',
+    [nome_aluno, matricula, mac_address, id],
+    function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'Dispositivo atualizado com sucesso' });
+    });
+});
+
+// Excluir dispositivo
+app.delete('/api/dispositivos/:id', authMiddleware, (req, res) => {
+  const { id } = req.params;
+  
+  db.run('DELETE FROM dispositivos WHERE id = ?', [id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Dispositivo excluído com sucesso' });
+  });
+});
+
+// Limpar registros
+app.delete('/api/admin/limpar/presenca', authMiddleware, (req, res) => {
+  db.run('DELETE FROM registros_presenca', function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Registros de presença limpos', count: this.changes });
+  });
+});
+
+app.delete('/api/admin/limpar/manual', authMiddleware, (req, res) => {
+  db.run('DELETE FROM registros_manuais', function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Registros manuais limpos', count: this.changes });
+  });
+});
+
+app.delete('/api/admin/limpar/todos', authMiddleware, (req, res) => {
+  let total = 0;
+  db.run('DELETE FROM registros_presenca', function(err) {
+    if (!err) total += this.changes;
+    db.run('DELETE FROM registros_manuais', function(err) {
+      if (!err) total += this.changes;
+      res.json({ message: 'Todos os registros limpos', count: total });
+    });
+  });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});
