@@ -15,7 +15,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 
-const API_URL = 'http://192.168.15.13:3000/api';
+const API_URL = 'http://SEU_IP:3000/api';
 
 const generateUniqueId = () => {
   return 'id-' + Date.now() + '-' + Math.random().toString(36).substring(2, 15);
@@ -41,7 +41,7 @@ const App = () => {
   const [deviceToDelete, setDeviceToDelete] = useState(null);
 
   useEffect(() => {
-    console.log('Ì∫Ä App iniciado');
+    console.log('ÔøΩÔøΩÔøΩ App iniciado');
     checkAutoLogin();
     getDeviceId();
     startWifiMonitoring();
@@ -53,9 +53,9 @@ const App = () => {
       if (!id) {
         id = generateUniqueId();
         await AsyncStorage.setItem('deviceId', id);
-        console.log('Ì∂ï Novo Device ID gerado:', id);
+        console.log('ÔøΩÔøΩÔøΩ Novo Device ID gerado:', id);
       } else {
-        console.log('Ì≥± Device ID existente:', id);
+        console.log('ÔøΩÔøΩÔøΩ Device ID existente:', id);
       }
       setDeviceId(id);
       return id;
@@ -76,15 +76,15 @@ const App = () => {
   };
 
   const startWifiMonitoring = () => {
-    console.log('Ì¥ç Iniciando monitoramento de Wi-Fi...');
+    console.log('ÔøΩÔøΩÔøΩ Iniciando monitoramento de Wi-Fi...');
     
     const unsubscribe = NetInfo.addEventListener(async state => {
-      console.log('Ì≥° Estado da rede:', { type: state.type, isConnected: state.isConnected });
+      console.log('ÔøΩÔøΩÔøΩ Estado da rede:', { type: state.type, isConnected: state.isConnected });
       
       if (state.isConnected && state.type === 'wifi') {
         console.log('‚úÖ Conectado ao Wi-Fi!');
         const deviceId_local = await getDeviceId();
-        console.log('Ì≥± Device ID atual:', deviceId_local);
+        console.log('ÔøΩÔøΩÔøΩ Device ID atual:', deviceId_local);
         if (deviceId_local) {
           await registerPresenceByWifi(deviceId_local);
         }
@@ -96,8 +96,8 @@ const App = () => {
 
   const registerPresenceByWifi = async (deviceIdentifier) => {
     try {
-      console.log('Ì≥§ Enviando requisi√ß√£o para:', `${API_URL}/presenca/wifi`);
-      console.log('Ì≥± Device ID:', deviceIdentifier);
+      console.log('ÔøΩÔøΩÔøΩ Enviando requisi√ß√£o para:', `${API_URL}/presenca/wifi`);
+      console.log('ÔøΩÔøΩÔøΩ Device ID:', deviceIdentifier);
       
       const response = await fetch(`${API_URL}/presenca/wifi`, {
         method: 'POST',
@@ -106,7 +106,7 @@ const App = () => {
       });
       
       const data = await response.json();
-      console.log('Ì≥• Resposta do servidor:', data);
+      console.log('ÔøΩÔøΩÔøΩ Resposta do servidor:', data);
       
       if (data.status === 'registrado') {
         console.log('‚úÖ Presen√ßa registrada com sucesso!');
@@ -201,7 +201,7 @@ const App = () => {
       const response = await fetch(`${API_URL}/dispositivos`);
       const data = await response.json();
       setDevices(data);
-      console.log('Ì≥± Dispositivos carregados:', data.length);
+      console.log('ÔøΩÔøΩÔøΩ Dispositivos carregados:', data.length);
     } catch (error) {
       console.error('Erro ao carregar dispositivos:', error);
     }
@@ -337,7 +337,7 @@ const App = () => {
       const response = await fetch(`${API_URL}/dashboard/stats`);
       const data = await response.json();
       setStats(data);
-      console.log('Ì≥ä Stats atualizados:', data);
+      console.log('ÔøΩÔøΩÔøΩ Stats atualizados:', data);
     } catch (error) {
       console.error('Erro ao carregar stats:', error);
     }
@@ -348,7 +348,7 @@ const App = () => {
       const response = await fetch(`${API_URL}/relatorio/presencas`);
       const data = await response.json();
       setHistory(data);
-      console.log('Ì≥ú Hist√≥rico carregado:', data.length);
+      console.log('ÔøΩÔøΩÔøΩ Hist√≥rico carregado:', data.length);
     } catch (error) {
       console.error('Erro ao carregar hist√≥rico:', error);
     }
@@ -540,7 +540,7 @@ const App = () => {
                       <Text style={styles.actionButtonText}>‚úèÔ∏è</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.deleteButton} onPress={() => confirmDeleteDevice(device)}>
-                      <Text style={styles.actionButtonText}>Ì∑ëÔ∏è</Text>
+                      <Text style={styles.actionButtonText}>ÔøΩÔøΩÔøΩÔ∏è</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
