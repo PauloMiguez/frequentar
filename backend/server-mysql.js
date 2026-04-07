@@ -14,7 +14,7 @@ app.use(express.json());
 const pool = mysql.createPool({
   host: 'localhost',
   user: 'root',
-  password: '7501',
+  password: 'sua_senha',
   database: 'presenca_wifi',
   waitForConnections: true,
   connectionLimit: 10,
