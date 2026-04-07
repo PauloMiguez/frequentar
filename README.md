@@ -1,10 +1,3 @@
-Vou criar um README completo e atualizado com todas as informações do sistema.
-
-```bash
-cd ~/presenca-wifi
-cat > README.md << 'EOF'
-# 🎓 Sistema de Presença por Wi-Fi
-
 Sistema automatizado para registro de presença de alunos em escolas e faculdades utilizando conexão Wi-Fi.
 
 ## 📋 Índice
@@ -26,7 +19,6 @@ Sistema automatizado para registro de presença de alunos em escolas e faculdade
 - [Estrutura do Projeto](#-estrutura-do-projeto)
 - [API Endpoints](#-api-endpoints)
 - [Solução de Problemas](#-solução-de-problemas)
-- [Migração do SQLite para MySQL](#-migração-do-sqlite-para-mysql)
 - [Contribuição](#-contribuição)
 - [Licença](#-licença)
 
@@ -46,7 +38,7 @@ Este sistema elimina a necessidade de controle de presença manual, registrando 
 - ✅ **Relatórios**: Consulta de histórico por período
 
 ### Banco de Dados
-- ✅ **MySQL** (produção) ou **SQLite** (desenvolvimento)
+- ✅ **MySQL** 
 - ✅ Suporte a múltiplos usuários simultâneos
 - ✅ Backup e restauração facilitados
 
@@ -78,7 +70,6 @@ Este sistema elimina a necessidade de controle de presença manual, registrando 
 
 ### Banco de Dados
 - **MySQL** (Recomendado para produção)
-- **SQLite** (Para desenvolvimento e testes)
 
 ## 📋 Pré-requisitos
 
@@ -87,7 +78,7 @@ Este sistema elimina a necessidade de controle de presença manual, registrando 
 - Git
 - Smartphone com Android ou iOS
 - App Expo Go instalado no celular
-- MySQL Server (para produção) ou SQLite (já incluído)
+- MySQL Server 
 
 ## 🔧 Instalação
 
@@ -249,18 +240,6 @@ npx expo start -c
    - Preencha nome, matrícula e MAC address
    - Clique em "Cadastrar Dispositivo"
 
-#### Como obter o MAC Address do celular do aluno
-
-**Android:**
-```
-Configurações > Sobre o telefone > Status > Endereço MAC Wi-Fi
-```
-
-**iOS:**
-```
-Configurações > Geral > Sobre > Endereço Wi-Fi
-```
-
 > **Importante para iOS:** Desative o "Endereço Wi-Fi Privado" nas configurações da rede.
 
 #### Uso Diário
@@ -380,33 +359,6 @@ kill -9 NUMERO_DO_PROCESSO
 
 **Solução:** Cadastre o Device ID que aparece no Dashboard do app
 
-## 🔄 Migração do SQLite para MySQL
-
-### Passo 1: Instalar dependências
-
-```bash
-cd backend
-npm install mysql2
-```
-
-### Passo 2: Criar banco de dados MySQL
-
-```sql
-CREATE DATABASE presenca_wifi;
-```
-
-### Passo 3: Executar migração
-
-```bash
-node migrate-to-mysql.js
-```
-
-### Passo 4: Iniciar servidor MySQL
-
-```bash
-node server-mysql.js
-```
-
 ## 🤝 Contribuição
 
 1. Fork o projeto
@@ -461,26 +413,3 @@ curl -X POST http://localhost:3000/api/dispositivos \
 ---
 
 **✨ Sistema pronto para produção!** 🚀
-EOF
-
-echo "✅ README.md atualizado com sucesso!"
-```
-
-## Verifique se o arquivo foi criado:
-
-```bash
-ls -la README.md
-cat README.md | head -50
-```
-
-O README agora inclui:
-- ✅ Documentação completa do sistema
-- ✅ Instruções para MySQL e SQLite
-- ✅ Configuração do banco de dados
-- ✅ API endpoints documentados
-- ✅ Solução de problemas
-- ✅ Guia de migração
-- ✅ Estrutura do projeto
-- ✅ Exemplos de uso
-
-**O README está pronto para ser compartilhado!** 📚
