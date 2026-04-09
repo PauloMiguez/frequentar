@@ -24,7 +24,8 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_WIFI_STATE",
         "CHANGE_WIFI_STATE"
-      ]
+      ],
+      "package": "com.frequentar.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
