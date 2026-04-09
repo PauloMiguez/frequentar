@@ -9,11 +9,12 @@
       "resizeMode": "contain",
       "backgroundColor": "#0a2b4e"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Precisamos acessar sua localização para identificar a rede Wi-Fi da escola e registrar sua presença."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,8 +25,7 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_WIFI_STATE",
         "CHANGE_WIFI_STATE"
-      ],
-      "package": "com.frequentar.app"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
