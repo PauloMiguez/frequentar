@@ -147,3 +147,11 @@ export const api = {
 };
 
 export default api;
+  // Buscar todas as redes autorizadas
+  getRedesAutorizadas: () => request('/wifi/redes-autorizadas'),
+  
+  // Validar rede específica
+  validarRede: (ssid, bssid) => request('/wifi/validar-rede', {
+    method: 'POST',
+    body: JSON.stringify({ ssid, bssid })
+  }),

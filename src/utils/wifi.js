@@ -1,103 +1,211 @@
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '../services/api';
 
 // Configuração fixa do dispositivo
-const FIXED_DEVICE_ID = 'device_aluno_3_1775738624986'; // MAC cadastrado no backend
+const FIXED_DEVICE_ID = 'device_aluno_3_1775738624986';
 
-// Configuração da rede Wi-Fi da escola
-const WIFI_CONFIG = {
-  ssid: 'ROCHA MIGUEZ-5G',      // SSID correto da rede
-  bssid: '84:0B:BB:D7:81:65',    // BSSID correto cadastrado no sistema
-  useAutoDetect: true            // Tentar detectar automaticamente primeiro
-};
+// Cache das redes autorizadas
+let redesAutorizadasCache = null;
+let ultimaConsultaCache = null;
+const TEMPO_CACHE = 5 * 60 * 1000; // 5 minutos
 
 export const getDeviceId = async () => {
-  try {
-    // Usar MAC fixo cadastrado no banco
-    console.log('📱 Usando Device ID fixo:', FIXED_DEVICE_ID);
-    return FIXED_DEVICE_ID;
-  } catch (error) {
-    console.error('Erro ao obter deviceId:', error);
-    return 'device-fallback-' + Date.now();
-  }
+    try {
+        console.log('📱 Usando Device ID fixo:', FIXED_DEVICE_ID);
+        return FIXED_DEVICE_ID;
+    } catch (error) {
+        console.error('Erro ao obter deviceId:', error);
+        return 'device-fallback-' + Date.now();
+    }
 };
 
+// Buscar redes autorizadas do backend
+export const getRedesAutorizadas = async (forceRefresh = false) => {
+    try {
+        const agora = Date.now();
+        
+        // Usar cache se válido
+        if (!forceRefresh && redesAutorizadasCache && (agora - ultimaConsultaCache) < TEMPO_CACHE) {
+            console.log('📡 Usando cache de redes autorizadas:', redesAutorizadasCache.length, 'redes');
+            return redesAutorizadasCache;
+        }
+        
+        console.log('📡 Buscando redes autorizadas no backend...');
+        const redes = await api.getRedesAutorizadas();
+        redesAutorizadasCache = redes;
+        ultimaConsultaCache = agora;
+        
+        console.log('✅ Redes autorizadas carregadas:', redes.length);
+        redes.forEach(rede => {
+            console.log(`   - ${rede.ssid} (${rede.bssid}) - ${rede.predio}/${rede.sala}`);
+        });
+        
+        return redes;
+    } catch (error) {
+        console.error('❌ Erro ao buscar redes autorizadas:', error);
+        return redesAutorizadasCache || [];
+    }
+};
+
+// Validar rede atual contra as autorizadas
+export const validarRedeAtual = async (wifiInfo, redesAutorizadas) => {
+    if (!wifiInfo || !wifiInfo.ssid) {
+        return {
+            valida: false,
+            message: 'Não conectado a nenhuma rede Wi-Fi',
+            rede: null
+        };
+    }
+    
+    // Buscar rede correspondente (ignorando case)
+    const redeAutorizada = redesAutorizadas.find(rede => 
+        rede.ssid?.toLowerCase() === wifiInfo.ssid?.toLowerCase() ||
+        rede.bssid?.toLowerCase() === wifiInfo.bssid?.toLowerCase()
+    );
+    
+    if (redeAutorizada) {
+        return {
+            valida: true,
+            message: `✅ Rede autorizada: ${redeAutorizada.ssid} (${redeAutorizada.predio} - ${redeAutorizada.sala})`,
+            rede: redeAutorizada
+        };
+    }
+    
+    // Verificar se existe alguma rede próxima (por SSID)
+    const redesProximas = redesAutorizadas.filter(rede => 
+        rede.ssid?.toLowerCase().includes(wifiInfo.ssid?.toLowerCase()) ||
+        wifiInfo.ssid?.toLowerCase().includes(rede.ssid?.toLowerCase())
+    );
+    
+    if (redesProximas.length > 0) {
+        return {
+            valida: false,
+            message: `⚠️ Rede não autorizada. Conecte-se a: ${redesProximas.map(r => r.ssid).join(', ')}`,
+            rede: null,
+            sugestoes: redesProximas
+        };
+    }
+    
+    return {
+        valida: false,
+        message: '❌ Rede Wi-Fi não autorizada. Conecte-se à rede oficial da escola.',
+        rede: null
+    };
+};
+
+// Obter informações da rede atual (sem hardcoded)
 export const getWifiInfo = async () => {
-  try {
-    const netInfo = await NetInfo.fetch();
-    
-    console.log('📶 NetInfo detalhada:', JSON.stringify(netInfo, null, 2));
-    
-    if (netInfo.type !== 'wifi' || !netInfo.isConnected) {
-      console.log('⚠️ Não está conectado ao Wi-Fi');
-      return null;
-    }
-
-    let ssid = WIFI_CONFIG.ssid;      // Valor padrão
-    let bssid = WIFI_CONFIG.bssid;    // Valor padrão
-    let ipAddress = netInfo.details?.ipAddress || '192.168.15.40';
-
-    // Se a detecção automática estiver ativada, tenta pegar os valores reais
-    if (WIFI_CONFIG.useAutoDetect) {
-      // Tenta pegar o SSID real
-      if (netInfo.details?.ssid) {
-        const detectedSsid = netInfo.details.ssid.replace(/^"|"$/g, '');
-        if (detectedSsid && detectedSsid !== '') {
-          ssid = detectedSsid;
-          console.log('📡 SSID detectado:', ssid);
-        } else {
-          console.log('⚠️ SSID detectado vazio, usando fallback:', ssid);
+    try {
+        const netInfo = await NetInfo.fetch();
+        
+        if (netInfo.type !== 'wifi' || !netInfo.isConnected) {
+            console.log('⚠️ Não está conectado ao Wi-Fi');
+            return null;
         }
-      } else {
-        console.log('⚠️ Não foi possível ler o SSID, usando fallback:', ssid);
-      }
 
-      // Tenta pegar o BSSID real
-      if (netInfo.details?.bssid) {
-        const detectedBssid = netInfo.details.bssid;
-        if (detectedBssid && detectedBssid !== '02:00:00:00:00:00') {
-          // Se detectou um BSSID válido (diferente do genérico), usa ele
-          bssid = detectedBssid;
-          console.log('📡 BSSID detectado:', bssid);
-        } else {
-          // Se for o BSSID genérico do Android, mantém o configurado
-          console.log('⚠️ BSSID genérico detectado, usando fallback:', bssid);
+        let ssid = null;
+        let bssid = null;
+        let ipAddress = netInfo.details?.ipAddress || null;
+
+        if (netInfo.details?.ssid) {
+            ssid = netInfo.details.ssid.replace(/^"|"$/g, '');
         }
-      } else {
-        console.log('⚠️ Não foi possível ler o BSSID, usando fallback:', bssid);
-      }
-    }
 
-    const wifiInfo = {
-      ssid: ssid,
-      bssid: bssid,
-      ip: ipAddress,
-      isConnected: true
+        if (netInfo.details?.bssid) {
+            bssid = netInfo.details.bssid;
+        }
+
+        const wifiInfo = {
+            ssid: ssid,
+            bssid: bssid,
+            ip: ipAddress,
+            isConnected: true
+        };
+        
+        console.log('📡 Wi-Fi detectado:', wifiInfo);
+        return wifiInfo;
+        
+    } catch (error) {
+        console.error('Erro ao obter informações da rede:', error);
+        return null;
+    }
+};
+
+// Verificar rede e retornar status completo
+export const verificarStatusRede = async () => {
+    try {
+        const wifiInfo = await getWifiInfo();
+        
+        if (!wifiInfo) {
+            return {
+                conectado: false,
+                valida: false,
+                message: '📡 Conecte-se à rede Wi-Fi da escola para registrar presença',
+                rede: null
+            };
+        }
+        
+        const redesAutorizadas = await getRedesAutorizadas();
+        const validacao = await validarRedeAtual(wifiInfo, redesAutorizadas);
+        
+        return {
+            conectado: true,
+            ...validacao,
+            redeAtual: wifiInfo
+        };
+        
+    } catch (error) {
+        console.error('Erro ao verificar status da rede:', error);
+        return {
+            conectado: false,
+            valida: false,
+            message: 'Erro ao verificar conexão',
+            rede: null
+        };
+    }
+};
+
+// Iniciar monitoramento com validação dinâmica
+export const startWifiMonitoring = (callback, interval = 30000) => {
+    let intervalId = null;
+    let isMonitoring = true;
+    
+    const checkWifi = async () => {
+        if (!isMonitoring) return;
+        
+        const status = await verificarStatusRede();
+        
+        if (callback) {
+            callback(status);
+        }
+        
+        if (status.valida && status.conectado) {
+            console.log('✅ Rede válida, tentando registrar presença...');
+            const deviceId = await getDeviceId();
+            
+            try {
+                const result = await api.registrarPresencaAuto({
+                    mac_address: deviceId,
+                    ssid: status.redeAtual.ssid,
+                    bssid: status.redeAtual.bssid,
+                    client_ip: status.redeAtual.ip
+                });
+                
+                if (callback) {
+                    callback({ ...status, registro: result });
+                }
+            } catch (error) {
+                console.error('❌ Erro ao registrar presença:', error);
+            }
+        }
     };
     
-    console.log('📡 Wi-Fi Info final enviado:', wifiInfo);
-    return wifiInfo;
+    checkWifi();
+    intervalId = setInterval(checkWifi, interval);
     
-  } catch (error) {
-    console.error('Erro ao obter informações da rede:', error);
-    return null;
-  }
-};
-
-export const startWifiMonitoring = (callback, interval = 30000) => {
-  let intervalId = null;
-  
-  const checkWifi = async () => {
-    const wifiInfo = await getWifiInfo();
-    if (callback && wifiInfo) {
-      callback(wifiInfo);
-    }
-  };
-  
-  checkWifi();
-  intervalId = setInterval(checkWifi, interval);
-  
-  return () => {
-    if (intervalId) clearInterval(intervalId);
-  };
+    return () => {
+        isMonitoring = false;
+        if (intervalId) clearInterval(intervalId);
+    };
 };

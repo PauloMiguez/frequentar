@@ -298,3 +298,71 @@ const styles = StyleSheet.create({
   emptyText: { textAlign: 'center', color: '#999', padding: 20 },
   configText: { fontSize: 14, color: '#666', marginVertical: 5 }
 });
+
+// Estilos adicionais para status da rede
+  statusCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  statusSuccess: {
+    backgroundColor: '#d4edda',
+    borderWidth: 1,
+    borderColor: '#c3e6cb',
+  },
+  statusWarning: {
+    backgroundColor: '#fff3cd',
+    borderWidth: 1,
+    borderColor: '#ffeeba',
+  },
+  statusError: {
+    backgroundColor: '#f8d7da',
+    borderWidth: 1,
+    borderColor: '#f5c6cb',
+  },
+  statusIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  statusTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  statusMessage: {
+    fontSize: 14,
+    textAlign: 'center',
+    color: '#555',
+  },
+  redeInfo: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+    width: '100%',
+    alignItems: 'center',
+  },
+  redeInfoText: {
+    fontSize: 12,
+    color: '#666',
+    marginVertical: 2,
+  },
+  sugestoesContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+    width: '100%',
+  },
+  sugestoesTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 6,
+    color: '#856404',
+  },
+  sugestaoItem: {
+    fontSize: 12,
+    color: '#856404',
+    marginVertical: 2,
+  },
