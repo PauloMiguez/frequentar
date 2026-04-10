@@ -99,7 +99,9 @@ export const api = {
   updatePerfil: (data) => request('/usuarios/perfil', { 
     method: 'PUT', 
     body: JSON.stringify(data) 
-  })
+  }),
+  
+  getPerfil: () => request('/usuarios/perfil')
 };
 
 export default api;
