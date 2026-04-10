@@ -31,13 +31,13 @@ export default function AlunoScreen({ navigation }) {
   const [statusRede, setStatusRede] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeMenu, setActiveMenu] = useState('dashboard');
   
   const tentativaRealizada = useRef(false);
 
   useEffect(() => {
     const init = async () => {
-      console.log('🚀 Inicializando...');
+      console.log('🚀 Inicializando tela do aluno...');
       await solicitarPermissaoLocalizacao();
       await carregarRedesAutorizadas();
       await verificarRegistroDiario();
@@ -47,11 +47,9 @@ export default function AlunoScreen({ navigation }) {
       loadHorario();
       iniciarMonitoramentoRede();
       
-      // ÚNICA tentativa de registro
       if (!tentativaRealizada.current) {
         tentativaRealizada.current = true;
         await tentarRegistrarPresenca((resultado) => {
-          // Apenas UM pop-up
           if (resultado.type === 'success') {
             Alert.alert('✅ Sucesso', resultado.message, [{ text: 'OK' }]);
             loadStats();
@@ -151,84 +149,98 @@ export default function AlunoScreen({ navigation }) {
   const formatTime = (timeString) => timeString?.substring(0, 5) || '--:--';
   const calcularPercentual = () => stats.totalDias === 0 ? 0 : ((stats.presentes / stats.totalDias) * 100).toFixed(1);
 
+  const renderStatsCards = () => (
+    <View style={styles.statsContainer}>
+      <View style={styles.statCard}>
+        <Text style={styles.statValue}>{stats.presentes}</Text>
+        <Text style={styles.statLabel}>PRESENÇAS</Text>
+      </View>
+      <View style={styles.statCard}>
+        <Text style={styles.statValue}>{stats.faltas}</Text>
+        <Text style={styles.statLabel}>FALTAS</Text>
+      </View>
+      <View style={styles.statCard}>
+        <Text style={styles.statValue}>{calcularPercentual()}%</Text>
+        <Text style={styles.statLabel}>FREQUÊNCIA</Text>
+      </View>
+    </View>
+  );
+
   const renderStatusConexao = () => {
     if (!statusRede) {
       return (
-        <View style={styles.statusCard}>
-          <ActivityIndicator size="small" color="#0a2b4e" />
-          <Text style={styles.statusMessage}>Verificando conexão...</Text>
+        <View style={styles.infoCard}>
+          <Text style={styles.infoText}>🔍 Verificando conexão...</Text>
         </View>
       );
     }
     if (!statusRede.conectado) {
       return (
-        <View style={[styles.statusCard, styles.statusWarning]}>
-          <Text style={styles.statusIcon}>📡</Text>
-          <Text style={styles.statusTitle}>Sem conexão Wi-Fi</Text>
-          <Text style={styles.statusMessage}>Conecte-se à rede Wi-Fi da escola</Text>
+        <View style={[styles.infoCard, styles.warningCard]}>
+          <Text style={styles.infoText}>📡 Sem conexão Wi-Fi</Text>
+          <Text style={styles.infoSubtext}>Conecte-se à rede da escola</Text>
         </View>
       );
     }
     if (statusRede.valida) {
       return (
-        <View style={[styles.statusCard, styles.statusSuccess]}>
-          <Text style={styles.statusIcon}>✅</Text>
-          <Text style={styles.statusTitle}>Rede Autorizada</Text>
-          <Text style={styles.statusMessage}>{statusRede.message}</Text>
+        <View style={[styles.infoCard, styles.successCard]}>
+          <Text style={styles.infoText}>✅ Rede Autorizada</Text>
+          <Text style={styles.infoSubtext}>{statusRede.redeAtual?.ssid}</Text>
         </View>
       );
     }
     return (
-      <View style={[styles.statusCard, styles.statusError]}>
-        <Text style={styles.statusIcon}>❌</Text>
-        <Text style={styles.statusTitle}>Rede não autorizada</Text>
-        <Text style={styles.statusMessage}>Conecte-se à rede oficial da escola</Text>
+      <View style={[styles.infoCard, styles.errorCard]}>
+        <Text style={styles.infoText}>❌ Rede não autorizada</Text>
+        <Text style={styles.infoSubtext}>Conecte-se à rede oficial da escola</Text>
       </View>
     );
   };
 
-  const renderDashboard = () => (
-    <View>
-      <View style={styles.statsContainer}>
-        <View style={styles.statBox}><Text style={styles.statNumber}>{stats.presentes}</Text><Text style={styles.statLabel}>Presenças</Text></View>
-        <View style={styles.statBox}><Text style={styles.statNumber}>{stats.faltas}</Text><Text style={styles.statLabel}>Faltas</Text></View>
-        <View style={styles.statBox}><Text style={styles.statNumber}>{calcularPercentual()}%</Text><Text style={styles.statLabel}>Frequência</Text></View>
-      </View>
-      {renderStatusConexao()}
-      {horario.nome && (
-        <View style={styles.horarioCard}>
-          <Text style={styles.cardTitle}>📅 Horário da Turma</Text>
-          <Text style={styles.turmaNome}>{horario.nome}</Text>
-          <Text style={styles.horarioTexto}>{formatTime(horario.horario_inicio)} às {formatTime(horario.horario_fim)}</Text>
-        </View>
+  const renderHorario = () => (
+    <View style={styles.infoCard}>
+      <Text style={styles.infoTitle}>📅 Horário da Turma</Text>
+      <Text style={styles.infoValue}>{horario.nome || 'Carregando...'}</Text>
+      <Text style={styles.infoSubtext}>
+        {formatTime(horario.horario_inicio)} às {formatTime(horario.horario_fim)}
+      </Text>
+    </View>
+  );
+
+  const renderDesempenho = () => (
+    <View style={styles.infoCard}>
+      <Text style={styles.infoTitle}>📊 Seu Desempenho</Text>
+      <Text style={styles.infoValue}>Frequência: {calcularPercentual()}%</Text>
+      <Text style={styles.infoSubtext}>Mínimo necessário: 75%</Text>
+      {parseFloat(calcularPercentual()) >= 75 ? (
+        <Text style={styles.successText}>✅ Boa frequência! Continue assim!</Text>
+      ) : (
+        <Text style={styles.warningText}>⚠️ Frequência abaixo do ideal!</Text>
       )}
-      <View style={styles.desempenhoCard}>
-        <Text style={styles.cardTitle}>📊 Seu Desempenho</Text>
-        <Text style={styles.desempenhoTexto}>Frequência: {calcularPercentual()}% (Mínimo: 75%)</Text>
-        {parseFloat(calcularPercentual()) >= 75 ? (
-          <Text style={styles.desempenhoSucesso}>✅ Boa frequência! Continue assim!</Text>
-        ) : (
-          <Text style={styles.desempenhoAlerta}>⚠️ Frequência abaixo do ideal!</Text>
-        )}
-      </View>
     </View>
   );
 
   const renderHistorico = () => (
-    <View>
-      <Text style={styles.sectionTitle}>📜 Histórico Completo</Text>
+    <View style={styles.historicoContainer}>
+      <Text style={styles.sectionTitle}>📜 Histórico de Presenças</Text>
       {historico.length === 0 ? (
-        <Text style={styles.emptyText}>Nenhum registro encontrado</Text>
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>Nenhum registro encontrado</Text>
+        </View>
       ) : (
         historico.map((item, index) => (
-          <View key={index} style={styles.historicoItem}>
+          <View key={index} style={styles.historicoCard}>
             <View style={styles.historicoHeader}>
               <Text style={styles.historicoDate}>{formatDate(item.data)}</Text>
-              <Text style={styles.historicoTime}>{formatTime(item.hora)}</Text>
-              <Text style={[styles.historicoStatus, { color: item.status === 'presente' ? '#4CAF50' : '#F44336' }]}>
-                {item.status === 'presente' ? 'Presente' : 'Ausente'}
+              <Text style={[
+                styles.historicoStatus,
+                { color: item.status === 'presente' ? '#4CAF50' : '#F44336' }
+              ]}>
+                {item.status === 'presente' ? '✓ Presente' : '✗ Ausente'}
               </Text>
             </View>
+            <Text style={styles.historicoTime}>⏰ {formatTime(item.hora)}</Text>
             <Text style={styles.historicoTurma}>📍 {item.turma_nome || 'Turma não informada'}</Text>
           </View>
         ))
@@ -237,10 +249,16 @@ export default function AlunoScreen({ navigation }) {
   );
 
   const renderConfiguracoes = () => (
-    <View>
+    <View style={styles.configContainer}>
       <Text style={styles.sectionTitle}>⚙️ Configurações</Text>
-      <View style={styles.configItem}><Text style={styles.configLabel}>Versão</Text><Text style={styles.configValue}>1.0.0</Text></View>
-      <View style={styles.configItem}><Text style={styles.configLabel}>Aluno</Text><Text style={styles.configValue}>{userName}</Text></View>
+      <View style={styles.configCard}>
+        <Text style={styles.configLabel}>Versão do App</Text>
+        <Text style={styles.configValue}>1.0.0</Text>
+      </View>
+      <View style={styles.configCard}>
+        <Text style={styles.configLabel}>Aluno</Text>
+        <Text style={styles.configValue}>{userName}</Text>
+      </View>
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutButtonText}>Sair da conta</Text>
       </TouchableOpacity>
@@ -249,86 +267,313 @@ export default function AlunoScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#0a2b4e" />
         <Text style={styles.loadingText}>Carregando...</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0a2b4e" />
+      
+      {/* Header */}
       <View style={styles.header}>
-        <View><Text style={styles.welcomeText}>Olá,</Text><Text style={styles.userName}>{userName}</Text><Text style={styles.userEmail}>{userEmail}</Text></View>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutIcon}><Text style={styles.logoutIconText}>🚪</Text></TouchableOpacity>
-      </View>
-      <View style={styles.tabBar}>
-        <TouchableOpacity style={[styles.tab, activeTab === 'dashboard' && styles.activeTab]} onPress={() => setActiveTab('dashboard')}>
-          <Text style={[styles.tabText, activeTab === 'dashboard' && styles.activeTabText]}>Dashboard</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, activeTab === 'historico' && styles.activeTab]} onPress={() => setActiveTab('historico')}>
-          <Text style={[styles.tabText, activeTab === 'historico' && styles.activeTabText]}>Histórico</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, activeTab === 'configuracoes' && styles.activeTab]} onPress={() => setActiveTab('configuracoes')}>
-          <Text style={[styles.tabText, activeTab === 'configuracoes' && styles.activeTabText]}>Config</Text>
+        <View>
+          <Text style={styles.headerTitle}>Frequentar</Text>
+          <Text style={styles.headerSubtitle}>Olá, {userName}</Text>
+        </View>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutIcon}>
+          <Text style={styles.logoutIconText}>🚪</Text>
         </TouchableOpacity>
       </View>
-      <ScrollView style={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        {activeTab === 'dashboard' && renderDashboard()}
-        {activeTab === 'historico' && renderHistorico()}
-        {activeTab === 'configuracoes' && renderConfiguracoes()}
+
+      {/* Menu de Navegação */}
+      <View style={styles.menuBar}>
+        <TouchableOpacity 
+          style={[styles.menuItem, activeMenu === 'dashboard' && styles.activeMenuItem]}
+          onPress={() => setActiveMenu('dashboard')}
+        >
+          <Text style={[styles.menuText, activeMenu === 'dashboard' && styles.activeMenuText]}>Dashboard</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.menuItem, activeMenu === 'historico' && styles.activeMenuItem]}
+          onPress={() => setActiveMenu('historico')}
+        >
+          <Text style={[styles.menuText, activeMenu === 'historico' && styles.activeMenuText]}>Histórico</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.menuItem, activeMenu === 'configuracoes' && styles.activeMenuItem]}
+          onPress={() => setActiveMenu('configuracoes')}
+        >
+          <Text style={[styles.menuText, activeMenu === 'configuracoes' && styles.activeMenuText]}>Configurações</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Conteúdo */}
+      <ScrollView 
+        style={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {activeMenu === 'dashboard' && (
+          <View>
+            {renderStatsCards()}
+            {renderStatusConexao()}
+            {renderHorario()}
+            {renderDesempenho()}
+          </View>
+        )}
+        
+        {activeMenu === 'historico' && renderHistorico()}
+        
+        {activeMenu === 'configuracoes' && renderConfiguracoes()}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
-  header: { backgroundColor: '#0a2b4e', padding: 20, paddingTop: 50, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  welcomeText: { color: 'rgba(255,255,255,0.8)', fontSize: 14 },
-  userName: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginTop: 5 },
-  userEmail: { color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 2 },
-  logoutIcon: { padding: 10 },
-  logoutIconText: { fontSize: 24 },
-  tabBar: { flexDirection: 'row', backgroundColor: '#fff', paddingVertical: 10, elevation: 2 },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 10 },
-  activeTab: { borderBottomWidth: 2, borderBottomColor: '#0a2b4e' },
-  tabText: { fontSize: 14, color: '#666' },
-  activeTabText: { color: '#0a2b4e', fontWeight: 'bold' },
-  content: { flex: 1, padding: 15 },
-  statsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  statBox: { flex: 1, backgroundColor: '#fff', borderRadius: 10, padding: 15, marginHorizontal: 5, alignItems: 'center', elevation: 2 },
-  statNumber: { fontSize: 28, fontWeight: 'bold', color: '#0a2b4e' },
-  statLabel: { fontSize: 12, color: '#666', marginTop: 5 },
-  statusCard: { backgroundColor: '#fff', borderRadius: 10, padding: 15, marginBottom: 15, alignItems: 'center', elevation: 2 },
-  statusSuccess: { backgroundColor: '#d4edda', borderWidth: 1, borderColor: '#c3e6cb' },
-  statusWarning: { backgroundColor: '#fff3cd', borderWidth: 1, borderColor: '#ffeeba' },
-  statusError: { backgroundColor: '#f8d7da', borderWidth: 1, borderColor: '#f5c6cb' },
-  statusIcon: { fontSize: 32, marginBottom: 8 },
-  statusTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 8 },
-  statusMessage: { fontSize: 14, textAlign: 'center', color: '#555' },
-  horarioCard: { backgroundColor: '#fff', borderRadius: 10, padding: 15, marginBottom: 15, elevation: 2 },
-  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 10 },
-  turmaNome: { fontSize: 16, color: '#0a2b4e', fontWeight: 'bold', marginBottom: 5 },
-  horarioTexto: { fontSize: 14, color: '#666' },
-  desempenhoCard: { backgroundColor: '#fff', borderRadius: 10, padding: 15, marginBottom: 15, elevation: 2 },
-  desempenhoTexto: { fontSize: 14, color: '#555', marginBottom: 8 },
-  desempenhoSucesso: { fontSize: 14, color: '#4CAF50', fontWeight: 'bold' },
-  desempenhoAlerta: { fontSize: 14, color: '#F44336', fontWeight: 'bold' },
-  historicoItem: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 10, elevation: 1 },
-  historicoHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  historicoDate: { fontSize: 14, fontWeight: 'bold', color: '#333' },
-  historicoTime: { fontSize: 12, color: '#666' },
-  historicoStatus: { fontSize: 14, fontWeight: 'bold' },
-  historicoTurma: { fontSize: 12, color: '#666' },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 15 },
-  emptyText: { textAlign: 'center', color: '#999', marginTop: 30 },
-  configItem: { backgroundColor: '#fff', borderRadius: 10, padding: 15, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between' },
-  configLabel: { fontSize: 14, color: '#666' },
-  configValue: { fontSize: 14, fontWeight: 'bold', color: '#333' },
-  logoutButton: { backgroundColor: '#F44336', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 20 },
-  logoutButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  header: {
+    backgroundColor: '#0a2b4e',
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 4,
+  },
+  logoutIcon: {
+    padding: 8,
+  },
+  logoutIconText: {
+    fontSize: 24,
+  },
+  menuBar: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  menuItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  activeMenuItem: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#0a2b4e',
+  },
+  menuText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  activeMenuText: {
+    color: '#0a2b4e',
+    fontWeight: 'bold',
+  },
+  content: {
+    flex: 1,
+    padding: 16,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 4,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#0a2b4e',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  infoCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+  },
+  warningCard: {
+    backgroundColor: '#fff3cd',
+    borderLeftWidth: 4,
+    borderLeftColor: '#ffc107',
+  },
+  successCard: {
+    backgroundColor: '#d4edda',
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+  },
+  errorCard: {
+    backgroundColor: '#f8d7da',
+    borderLeftWidth: 4,
+    borderLeftColor: '#F44336',
+  },
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  infoValue: {
+    fontSize: 16,
+    color: '#0a2b4e',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#555',
+    marginBottom: 4,
+  },
+  infoSubtext: {
+    fontSize: 12,
+    color: '#666',
+  },
+  successText: {
+    fontSize: 13,
+    color: '#4CAF50',
+    marginTop: 8,
+    fontWeight: '500',
+  },
+  warningText: {
+    fontSize: 13,
+    color: '#F44336',
+    marginTop: 8,
+    fontWeight: '500',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
+  },
+  historicoContainer: {
+    flex: 1,
+  },
+  historicoCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    elevation: 1,
+  },
+  historicoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  historicoDate: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  historicoStatus: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  historicoTime: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  historicoTurma: {
+    fontSize: 12,
+    color: '#666',
+  },
+  emptyCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#999',
+  },
+  configContainer: {
+    flex: 1,
+  },
+  configCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  configLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  configValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  logoutButton: {
+    backgroundColor: '#F44336',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  logoutButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });
