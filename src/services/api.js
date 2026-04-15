@@ -102,7 +102,7 @@ export const api = {
   getRedesAutorizadas: () => request('/wifi/redes-autorizadas'),
   
   // Validar rede específica
-  validarRede: (ssid, bssid) => request('/wifi/validar-rede', {
+    validarRede: (ssid, bssid) => request('/wifi/validar-rede', {
     method: 'POST',
     body: JSON.stringify({ ssid, bssid })
   }),
@@ -110,7 +110,10 @@ export const api = {
   // Perfil
   updatePerfil: (data) => request('/usuarios/perfil', { method: 'PUT', body: JSON.stringify(data) }),
   
-  getPerfil: () => request('/usuarios/perfil')
+  getPerfil: () => request('/usuarios/perfil'),
+  
+  // Admin - APs (update)
+  updateAP: (id, data) => request(`/admin/aps/${id}`, { method: 'PUT', body: JSON.stringify(data) })
 };
 
 export default api;

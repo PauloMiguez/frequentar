@@ -10,6 +10,9 @@ import {
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  Switch,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -31,6 +34,12 @@ export default function AdminScreen({ navigation }) {
   const [aps, setAps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Modal states
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState('');
+  const [editingItem, setEditingItem] = useState(null);
+  const [formData, setFormData] = useState({});
 
   useFocusEffect(
     useCallback(() => {
@@ -134,24 +143,297 @@ export default function AdminScreen({ navigation }) {
     ]);
   };
 
+  // CRUD Functions
+  const openModal = (type, item = null) => {
+    setModalType(type);
+    setEditingItem(item);
+    
+    if (item) {
+      setFormData({ ...item });
+    } else {
+      setFormData({ ativo: 1 });
+    }
+    setModalVisible(true);
+  };
+
+  const handleSave = async () => {
+    try {
+      if (editingItem) {
+        // Update
+        if (modalType === 'aluno') {
+          await api.updateAluno(editingItem.id, formData);
+          // Atualizar localmente
+          setAlunos(prev => prev.map(a => a.id === editingItem.id ? { ...a, ...formData } : a));
+        } else if (modalType === 'professor') {
+          await api.updateProfessor(editingItem.id, formData);
+          setProfessores(prev => prev.map(p => p.id === editingItem.id ? { ...p, ...formData } : p));
+        } else if (modalType === 'turma') {
+          await api.updateTurma(editingItem.id, formData);
+          setTurmas(prev => prev.map(t => t.id === editingItem.id ? { ...t, ...formData } : t));
+        } else if (modalType === 'ap') {
+          await api.updateAP(editingItem.id, formData);
+          setAps(prev => prev.map(ap => ap.id === editingItem.id ? { ...ap, ...formData } : ap));
+        }
+        Alert.alert('Sucesso', 'Registro atualizado com sucesso!');
+      } else {
+        // Create
+        if (modalType === 'aluno') {
+          const newItem = await api.createAluno(formData);
+          await loadAlunos();
+        } else if (modalType === 'professor') {
+          await api.createProfessor(formData);
+          await loadProfessores();
+        } else if (modalType === 'turma') {
+          await api.createTurma(formData);
+          await loadTurmas();
+        } else if (modalType === 'ap') {
+          await api.createAP(formData);
+          await loadAPs();
+        }
+        Alert.alert('Sucesso', 'Registro criado com sucesso!');
+      }
+      
+      setModalVisible(false);
+      await loadDashboard();
+    } catch (error) {
+      Alert.alert('Erro', error.message || 'Erro ao salvar');
+    }
+  };
+
+  const handleDelete = async (type, id) => {
+    Alert.alert(
+      'Confirmar',
+      'Deseja realmente excluir este registro?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (type === 'aluno') {
+                await api.deleteAluno(id);
+                await loadAlunos();
+              } else if (type === 'professor') {
+                await api.deleteProfessor(id);
+                await loadProfessores();
+              } else if (type === 'turma') {
+                await api.deleteTurma(id);
+                await loadTurmas();
+              } else if (type === 'ap') {
+                await api.deleteAP(id);
+                await loadAPs();
+              }
+              Alert.alert('Sucesso', 'Registro excluído com sucesso!');
+              await loadDashboard();
+            } catch (error) {
+              Alert.alert('Erro', error.message || 'Erro ao excluir');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const renderModal = () => {
+    if (!modalVisible) return null;
+    
+    const isEditing = !!editingItem;
+    const title = `${isEditing ? 'Editar' : 'Novo'} ${
+      modalType === 'aluno' ? 'Aluno' : 
+      modalType === 'professor' ? 'Professor' : 
+      modalType === 'turma' ? 'Turma' : 'Ponto de Acesso'
+    }`;
+    
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{title}</Text>
+            
+            {modalType === 'aluno' && (
+              <>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nome"
+                  value={formData.nome || ''}
+                  onChangeText={(text) => setFormData({...formData, nome: text})}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  value={formData.email || ''}
+                  onChangeText={(text) => setFormData({...formData, email: text})}
+                  keyboardType="email-address"
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Matrícula"
+                  value={formData.matricula || ''}
+                  onChangeText={(text) => setFormData({...formData, matricula: text})}
+                />
+                {isEditing && (
+                  <View style={styles.switchContainer}>
+                    <Text style={styles.switchLabel}>Status: {formData.ativo === 1 ? 'Ativo' : 'Inativo'}</Text>
+                    <Switch
+                      value={formData.ativo === 1}
+                      onValueChange={(value) => setFormData({...formData, ativo: value ? 1 : 0})}
+                      trackColor={{ false: '#767577', true: '#4CAF50' }}
+                    />
+                  </View>
+                )}
+              </>
+            )}
+            
+            {modalType === 'professor' && (
+              <>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nome"
+                  value={formData.nome || ''}
+                  onChangeText={(text) => setFormData({...formData, nome: text})}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  value={formData.email || ''}
+                  onChangeText={(text) => setFormData({...formData, email: text})}
+                  keyboardType="email-address"
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Matrícula"
+                  value={formData.matricula || ''}
+                  onChangeText={(text) => setFormData({...formData, matricula: text})}
+                />
+                {isEditing && (
+                  <View style={styles.switchContainer}>
+                    <Text style={styles.switchLabel}>Status: {formData.ativo === 1 ? 'Ativo' : 'Inativo'}</Text>
+                    <Switch
+                      value={formData.ativo === 1}
+                      onValueChange={(value) => setFormData({...formData, ativo: value ? 1 : 0})}
+                      trackColor={{ false: '#767577', true: '#4CAF50' }}
+                    />
+                  </View>
+                )}
+              </>
+            )}
+            
+                        {modalType === 'turma' && (
+              <>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nome da Turma"
+                  value={formData.nome || ''}
+                  onChangeText={(text) => setFormData({...formData, nome: text})}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Código"
+                  value={formData.codigo || ''}
+                  onChangeText={(text) => setFormData({...formData, codigo: text})}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Horário Início (HH:MM)"
+                  value={formData.horario_inicio || ''}
+                  onChangeText={(text) => setFormData({...formData, horario_inicio: text})}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Horário Fim (HH:MM)"
+                  value={formData.horario_fim || ''}
+                  onChangeText={(text) => setFormData({...formData, horario_fim: text})}
+                />
+                {isEditing && (
+                  <View style={styles.switchContainer}>
+                    <Text style={styles.switchLabel}>Status: {formData.ativo === 1 ? 'Ativo' : 'Inativo'}</Text>
+                    <Switch
+                      value={formData.ativo === 1}
+                      onValueChange={(value) => setFormData({...formData, ativo: value ? 1 : 0})}
+                      trackColor={{ false: '#767577', true: '#4CAF50' }}
+                    />
+                  </View>
+                )}
+              </>
+            )}
+            
+            {modalType === 'ap' && (
+              <>
+                <TextInput
+                  style={styles.input}
+                  placeholder="SSID"
+                  value={formData.ssid || ''}
+                  onChangeText={(text) => setFormData({...formData, ssid: text})}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="BSSID (MAC)"
+                  value={formData.bssid || ''}
+                  onChangeText={(text) => setFormData({...formData, bssid: text})}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Sala"
+                  value={formData.sala || ''}
+                  onChangeText={(text) => setFormData({...formData, sala: text})}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Prédio"
+                  value={formData.predio || ''}
+                  onChangeText={(text) => setFormData({...formData, predio: text})}
+                />
+                {isEditing && (
+                  <View style={styles.switchContainer}>
+                    <Text style={styles.switchLabel}>Status: {formData.ativo === 1 ? 'Ativo' : 'Inativo'}</Text>
+                    <Switch
+                      value={formData.ativo === 1}
+                      onValueChange={(value) => setFormData({...formData, ativo: value ? 1 : 0})}
+                      trackColor={{ false: '#767577', true: '#4CAF50' }}
+                    />
+                  </View>
+                )}
+              </>
+            )}
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalButtonCancel} onPress={() => setModalVisible(false)}>
+                <Text style={styles.modalButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalButtonSave} onPress={handleSave}>
+                <Text style={styles.modalButtonText}>Salvar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   const renderStatsCards = () => (
     <View style={styles.statsContainer}>
-      <View style={styles.statCard}>
+      <TouchableOpacity style={styles.statCard} onPress={() => setActiveTab('alunos')}>
         <Text style={styles.statValue}>{stats.totalAlunos}</Text>
         <Text style={styles.statLabel}>ALUNOS</Text>
-      </View>
-      <View style={styles.statCard}>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.statCard} onPress={() => setActiveTab('professores')}>
         <Text style={styles.statValue}>{stats.totalProfessores}</Text>
         <Text style={styles.statLabel}>PROFESSORES</Text>
-      </View>
-      <View style={styles.statCard}>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.statCard} onPress={() => setActiveTab('turmas')}>
         <Text style={styles.statValue}>{stats.totalTurmas}</Text>
         <Text style={styles.statLabel}>TURMAS</Text>
-      </View>
-      <View style={styles.statCard}>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.statCard} onPress={() => setActiveTab('aps')}>
         <Text style={styles.statValue}>{stats.totalAPs}</Text>
         <Text style={styles.statLabel}>PONTOS DE ACESSO</Text>
-      </View>
+      </TouchableOpacity>
     </View>
   );
 
@@ -161,10 +443,21 @@ export default function AdminScreen({ navigation }) {
     </View>
   );
 
+  const renderListHeader = (title, count, onAdd) => (
+    <View style={styles.listHeader}>
+      <View>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text style={styles.sectionSubtitle}>Total: {count}</Text>
+      </View>
+      <TouchableOpacity style={styles.addButton} onPress={onAdd}>
+        <Text style={styles.addButtonText}>+ Novo</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   const renderAlunos = () => (
     <View style={styles.listContainer}>
-      <Text style={styles.sectionTitle}>👨‍🎓 Alunos Cadastrados</Text>
-      <Text style={styles.sectionSubtitle}>Total: {alunos.length}</Text>
+      {renderListHeader('👨‍🎓 Alunos Cadastrados', alunos.length, () => openModal('aluno'))}
       {alunos.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>Nenhum aluno cadastrado</Text>
@@ -176,8 +469,13 @@ export default function AdminScreen({ navigation }) {
               <Text style={styles.listItemTitle}>{item.nome}</Text>
               <Text style={styles.listItemSub}>{item.email}</Text>
               <Text style={styles.listItemSub}>Matrícula: {item.matricula}</Text>
+              <Text style={[styles.statusBadge, item.ativo === 1 ? styles.statusActive : styles.statusInactive]}>
+                {item.ativo === 1 ? 'Ativo' : 'Inativo'}
+              </Text>
             </View>
-            <Text style={styles.listItemBadge}>{item.turma_nome || 'Sem turma'}</Text>
+            <TouchableOpacity style={styles.actionEdit} onPress={() => openModal('aluno', item)}>
+              <Text style={styles.actionText}>✏️</Text>
+            </TouchableOpacity>
           </View>
         ))
       )}
@@ -186,8 +484,7 @@ export default function AdminScreen({ navigation }) {
 
   const renderProfessores = () => (
     <View style={styles.listContainer}>
-      <Text style={styles.sectionTitle}>👨‍🏫 Professores Cadastrados</Text>
-      <Text style={styles.sectionSubtitle}>Total: {professores.length}</Text>
+      {renderListHeader('👨‍🏫 Professores Cadastrados', professores.length, () => openModal('professor'))}
       {professores.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>Nenhum professor cadastrado</Text>
@@ -199,17 +496,22 @@ export default function AdminScreen({ navigation }) {
               <Text style={styles.listItemTitle}>{item.nome}</Text>
               <Text style={styles.listItemSub}>{item.email}</Text>
               <Text style={styles.listItemSub}>Matrícula: {item.matricula}</Text>
+              <Text style={[styles.statusBadge, item.ativo === 1 ? styles.statusActive : styles.statusInactive]}>
+                {item.ativo === 1 ? 'Ativo' : 'Inativo'}
+              </Text>
             </View>
+            <TouchableOpacity style={styles.actionEdit} onPress={() => openModal('professor', item)}>
+              <Text style={styles.actionText}>✏️</Text>
+            </TouchableOpacity>
           </View>
         ))
       )}
     </View>
   );
 
-  const renderTurmas = () => (
+    const renderTurmas = () => (
     <View style={styles.listContainer}>
-      <Text style={styles.sectionTitle}>📚 Turmas Cadastradas</Text>
-      <Text style={styles.sectionSubtitle}>Total: {turmas.length}</Text>
+      {renderListHeader('📚 Turmas Cadastradas', turmas.length, () => openModal('turma'))}
       {turmas.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>Nenhuma turma cadastrada</Text>
@@ -221,8 +523,13 @@ export default function AdminScreen({ navigation }) {
               <Text style={styles.listItemTitle}>{item.nome}</Text>
               <Text style={styles.listItemSub}>Código: {item.codigo || '-'}</Text>
               <Text style={styles.listItemSub}>Horário: {item.horario_inicio} - {item.horario_fim}</Text>
+              <Text style={[styles.statusBadge, item.ativo === 1 ? styles.statusActive : styles.statusInactive]}>
+                {item.ativo === 1 ? 'Ativo' : 'Inativo'}
+              </Text>
             </View>
-            <Text style={styles.listItemBadge}>{item.professor_nome || 'Sem professor'}</Text>
+            <TouchableOpacity style={styles.actionEdit} onPress={() => openModal('turma', item)}>
+              <Text style={styles.actionText}>✏️</Text>
+            </TouchableOpacity>
           </View>
         ))
       )}
@@ -231,8 +538,7 @@ export default function AdminScreen({ navigation }) {
 
   const renderAPs = () => (
     <View style={styles.listContainer}>
-      <Text style={styles.sectionTitle}>📡 Pontos de Acesso</Text>
-      <Text style={styles.sectionSubtitle}>Total: {aps.length}</Text>
+      {renderListHeader('📡 Pontos de Acesso', aps.length, () => openModal('ap'))}
       {aps.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>Nenhum ponto de acesso cadastrado</Text>
@@ -244,10 +550,13 @@ export default function AdminScreen({ navigation }) {
               <Text style={styles.listItemTitle}>{item.ssid}</Text>
               <Text style={styles.listItemSub}>BSSID: {item.bssid}</Text>
               <Text style={styles.listItemSub}>Local: {item.predio} - {item.sala}</Text>
+              <Text style={[styles.statusBadge, item.ativo === 1 ? styles.statusActive : styles.statusInactive]}>
+                {item.ativo === 1 ? 'Ativo' : 'Inativo'}
+              </Text>
             </View>
-            <Text style={[styles.listItemBadge, item.ativo ? styles.activeBadge : styles.inactiveBadge]}>
-              {item.ativo ? 'Ativo' : 'Inativo'}
-            </Text>
+            <TouchableOpacity style={styles.actionEdit} onPress={() => openModal('ap', item)}>
+              <Text style={styles.actionText}>✏️</Text>
+            </TouchableOpacity>
           </View>
         ))
       )}
@@ -344,6 +653,8 @@ export default function AdminScreen({ navigation }) {
         {activeTab === 'aps' && renderAPs()}
         {activeTab === 'configuracoes' && renderConfiguracoes()}
       </ScrollView>
+      
+      {renderModal()}
     </SafeAreaView>
   );
 }
@@ -368,15 +679,22 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 32, fontWeight: 'bold', color: '#0a2b4e' },
   statLabel: { fontSize: 12, color: '#666', marginTop: 4, fontWeight: '500' },
   listContainer: { flex: 1, marginBottom: 20 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 4 },
-  sectionSubtitle: { fontSize: 14, color: '#666', marginBottom: 16 },
+  listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  sectionSubtitle: { fontSize: 14, color: '#666', marginTop: 2 },
+  addButton: { backgroundColor: '#4CAF50', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  addButtonText: { color: '#fff', fontWeight: 'bold' },
   listItem: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 1 },
   listItemContent: { flex: 1 },
   listItemTitle: { fontSize: 14, fontWeight: 'bold', color: '#333' },
   listItemSub: { fontSize: 12, color: '#666', marginTop: 2 },
-  listItemBadge: { fontSize: 11, color: '#0a2b4e', backgroundColor: '#e8f4f8', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, fontWeight: 'bold' },
-  activeBadge: { color: '#4CAF50', backgroundColor: '#e8f5e9' },
-  inactiveBadge: { color: '#F44336', backgroundColor: '#ffebee' },
+  listItemActions: { flexDirection: 'row', gap: 8 },
+  actionEdit: { padding: 8, backgroundColor: '#2196F3', borderRadius: 8, marginHorizontal: 4 },
+  actionDelete: { padding: 8, backgroundColor: '#F44336', borderRadius: 8, marginHorizontal: 4 },
+  actionText: { fontSize: 14 },
+  statusBadge: { fontSize: 11, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, overflow: 'hidden', marginTop: 4, alignSelf: 'flex-start' },
+  statusActive: { backgroundColor: '#e8f5e9', color: '#4CAF50' },
+  statusInactive: { backgroundColor: '#ffebee', color: '#F44336' },
   emptyCard: { backgroundColor: '#fff', borderRadius: 12, padding: 30, alignItems: 'center' },
   emptyText: { fontSize: 14, color: '#999' },
   configContainer: { flex: 1 },
@@ -385,4 +703,15 @@ const styles = StyleSheet.create({
   configValue: { fontSize: 14, fontWeight: 'bold', color: '#333' },
   logoutButton: { backgroundColor: '#F44336', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 16 },
   logoutButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '90%', maxHeight: '80%' },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 12, fontSize: 16 },
+  switchContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingVertical: 8 },
+  switchLabel: { fontSize: 16, color: '#333' },
+  modalButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },
+  modalButtonCancel: { backgroundColor: '#999', padding: 12, borderRadius: 8, flex: 1, marginRight: 8, alignItems: 'center' },
+  modalButtonSave: { backgroundColor: '#4CAF50', padding: 12, borderRadius: 8, flex: 1, marginLeft: 8, alignItems: 'center' },
+  modalButtonText: { color: '#fff', fontWeight: 'bold' },
 });

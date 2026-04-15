@@ -1,17 +1,57 @@
-// Substituir a função loadDashboard por esta:
-
-  const loadDashboard = async () => {
-    try {
-      const data = await api.getAdminStats();
-      setStats(data);
-    } catch (error) {
-      console.error('Erro ao carregar dashboard:', error);
-      // Fallback para dados locais
-      setStats({
-        totalAlunos: alunos.length,
-        totalProfessores: professores.length,
-        totalTurmas: turmas.length,
-        totalAPs: aps.length,
-      });
-    }
+  const handleToggleStatus = async (type, item) => {
+    const newStatus = item.ativo === 1 ? 0 : 1;
+    const action = newStatus === 1 ? 'ativar' : 'desativar';
+    
+    Alert.alert(
+      'Confirmar',
+      `Deseja ${action} este registro?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Confirmar',
+          onPress: async () => {
+            try {
+              // Atualizar no backend
+              if (type === 'aluno') {
+                await api.updateAluno(item.id, { ...item, ativo: newStatus });
+              } else if (type === 'professor') {
+                await api.updateProfessor(item.id, { ...item, ativo: newStatus });
+              } else if (type === 'ap') {
+                await api.updateAP(item.id, { ...item, ativo: newStatus });
+              }
+              
+              // Atualizar localmente o item na lista
+              if (type === 'aluno') {
+                setAlunos(prevAlunos => 
+                  prevAlunos.map(a => a.id === item.id ? { ...a, ativo: newStatus } : a)
+                );
+              } else if (type === 'professor') {
+                setProfessores(prev => 
+                  prev.map(p => p.id === item.id ? { ...p, ativo: newStatus } : p)
+                );
+              } else if (type === 'ap') {
+                setAps(prev => 
+                  prev.map(ap => ap.id === item.id ? { ...ap, ativo: newStatus } : ap)
+                );
+              }
+              
+              // Atualizar estatísticas
+              setStats(prev => ({
+                ...prev,
+                totalAlunos: type === 'aluno' ? 
+                  (newStatus === 1 ? prev.totalAlunos + 1 : prev.totalAlunos - 1) : prev.totalAlunos,
+                totalProfessores: type === 'professor' ?
+                  (newStatus === 1 ? prev.totalProfessores + 1 : prev.totalProfessores - 1) : prev.totalProfessores,
+                totalAPs: type === 'ap' ?
+                  (newStatus === 1 ? prev.totalAPs + 1 : prev.totalAPs - 1) : prev.totalAPs,
+              }));
+              
+              Alert.alert('Sucesso', `Registro ${action}do com sucesso!`);
+            } catch (error) {
+              Alert.alert('Erro', error.message || `Erro ao ${action}`);
+            }
+          },
+        },
+      ]
+    );
   };
