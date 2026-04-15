@@ -1,0 +1,17 @@
+// Substituir a função loadDashboard por esta:
+
+  const loadDashboard = async () => {
+    try {
+      const data = await api.getAdminStats();
+      setStats(data);
+    } catch (error) {
+      console.error('Erro ao carregar dashboard:', error);
+      // Fallback para dados locais
+      setStats({
+        totalAlunos: alunos.length,
+        totalProfessores: professores.length,
+        totalTurmas: turmas.length,
+        totalAPs: aps.length,
+      });
+    }
+  };

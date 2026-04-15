@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  TextInput,
-  Modal,
-  FlatList,
   RefreshControl,
   SafeAreaView,
-  StatusBar
+  StatusBar,
+  ActivityIndicator,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
 
@@ -20,51 +19,63 @@ export default function AdminScreen({ navigation }) {
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [stats, setStats] = useState({});
+  const [stats, setStats] = useState({
+    totalAlunos: 0,
+    totalProfessores: 0,
+    totalTurmas: 0,
+    totalAPs: 0,
+  });
   const [alunos, setAlunos] = useState([]);
   const [professores, setProfessores] = useState([]);
   const [turmas, setTurmas] = useState([]);
   const [aps, setAps] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  
-  // Modais
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalType, setModalType] = useState('');
-  const [editItem, setEditItem] = useState(null);
-  const [formData, setFormData] = useState({});
 
-  useEffect(() => {
-    loadUserData();
-    loadDashboard();
-    loadAlunos();
-    loadProfessores();
-    loadTurmas();
-    loadAPs();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadUserData();
+      loadDashboard();
+      loadAlunos();
+      loadProfessores();
+      loadTurmas();
+      loadAPs();
+    }, [])
+  );
 
   const loadUserData = async () => {
-    const usuario = await AsyncStorage.getItem('usuario');
-    if (usuario) {
-      const user = JSON.parse(usuario);
-      setUserName(user.nome);
-      setUserEmail(user.email);
+    try {
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        const user = JSON.parse(userData);
+        setUserName(user.nome || 'Admin');
+        setUserEmail(user.email || '');
+      }
+    } catch (error) {
+      console.error('Erro ao carregar usuário:', error);
     }
   };
 
   const loadDashboard = async () => {
     try {
-      const data = await api.getDashboardStats();
-      setStats(data);
+      const data = await api.getAdminStats();
+      setStats({
+        totalAlunos: data.totalAlunos || 0,
+        totalProfessores: data.totalProfessores || 0,
+        totalTurmas: data.totalTurmas || 0,
+        totalAPs: data.totalAPs || 0,
+      });
     } catch (error) {
       console.error('Erro ao carregar dashboard:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadAlunos = async () => {
     try {
       const data = await api.getAlunos();
-      setAlunos(data);
+      setAlunos(data || []);
     } catch (error) {
       console.error('Erro ao carregar alunos:', error);
     }
@@ -73,7 +84,7 @@ export default function AdminScreen({ navigation }) {
   const loadProfessores = async () => {
     try {
       const data = await api.getProfessores();
-      setProfessores(data);
+      setProfessores(data || []);
     } catch (error) {
       console.error('Erro ao carregar professores:', error);
     }
@@ -82,7 +93,7 @@ export default function AdminScreen({ navigation }) {
   const loadTurmas = async () => {
     try {
       const data = await api.getTurmas();
-      setTurmas(data);
+      setTurmas(data || []);
     } catch (error) {
       console.error('Erro ao carregar turmas:', error);
     }
@@ -91,7 +102,7 @@ export default function AdminScreen({ navigation }) {
   const loadAPs = async () => {
     try {
       const data = await api.getAPs();
-      setAps(data);
+      setAps(data || []);
     } catch (error) {
       console.error('Erro ao carregar APs:', error);
     }
@@ -99,404 +110,279 @@ export default function AdminScreen({ navigation }) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadDashboard(), loadAlunos(), loadProfessores(), loadTurmas(), loadAPs()]);
+    await Promise.all([
+      loadDashboard(),
+      loadAlunos(),
+      loadProfessores(),
+      loadTurmas(),
+      loadAPs(),
+    ]);
     setRefreshing(false);
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('token');
-    await AsyncStorage.removeItem('usuario');
-    navigation.replace('Login');
-  };
-
-  const openModal = (type, item = null) => {
-    setModalType(type);
-    setEditItem(item);
-    if (item) {
-      setFormData(item);
-    } else {
-      setFormData({});
-    }
-    setModalVisible(true);
-  };
-
-  const saveItem = async () => {
-    setLoading(true);
-    try {
-      if (modalType === 'aluno') {
-        if (editItem) {
-          await api.updateAluno(editItem.id, formData);
-        } else {
-          await api.createAluno(formData);
-        }
-        await loadAlunos();
-      } else if (modalType === 'professor') {
-        if (editItem) {
-          await api.updateProfessor(editItem.id, formData);
-        } else {
-          await api.createProfessor(formData);
-        }
-        await loadProfessores();
-      } else if (modalType === 'turma') {
-        if (editItem) {
-          await api.updateTurma(editItem.id, formData);
-        } else {
-          await api.createTurma(formData);
-        }
-        await loadTurmas();
-      } else if (modalType === 'ap') {
-        if (editItem) {
-          await api.updateAP(editItem.id, formData);
-        } else {
-          await api.createAP(formData);
-        }
-        await loadAPs();
-      }
-      setModalVisible(false);
-      Alert.alert('Sucesso', `${modalType} salvo com sucesso!`);
-    } catch (error) {
-      Alert.alert('Erro', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteItem = async (type, id, name) => {
-    Alert.alert('Confirmar', `Deseja excluir ${name}?`, [
+    Alert.alert('Sair', 'Deseja realmente sair?', [
       { text: 'Cancelar', style: 'cancel' },
       {
-        text: 'Excluir',
-        style: 'destructive',
+        text: 'Sair',
         onPress: async () => {
-          try {
-            if (type === 'aluno') await api.deleteAluno(id);
-            else if (type === 'professor') await api.deleteProfessor(id);
-            else if (type === 'turma') await api.deleteTurma(id);
-            else if (type === 'ap') await api.deleteAP(id);
-            
-            Alert.alert('Sucesso', 'Excluído com sucesso!');
-            await Promise.all([loadAlunos(), loadProfessores(), loadTurmas(), loadAPs()]);
-          } catch (error) {
-            Alert.alert('Erro', error.message);
-          }
-        }
-      }
+          await AsyncStorage.removeItem('token');
+          await AsyncStorage.removeItem('user');
+          navigation.replace('Login');
+        },
+      },
     ]);
   };
 
-  const renderModal = () => {
-    let title = '';
-    let fields = [];
-
-    if (modalType === 'aluno') {
-      title = editItem ? 'Editar Aluno' : 'Novo Aluno';
-      fields = [
-        { key: 'nome', placeholder: 'Nome completo', value: formData.nome },
-        { key: 'matricula', placeholder: 'Matrícula', value: formData.matricula },
-        { key: 'email', placeholder: 'E-mail', value: formData.email, keyboardType: 'email-address' }
-      ];
-    } else if (modalType === 'professor') {
-      title = editItem ? 'Editar Professor' : 'Novo Professor';
-      fields = [
-        { key: 'nome', placeholder: 'Nome completo', value: formData.nome },
-        { key: 'email', placeholder: 'E-mail', value: formData.email, keyboardType: 'email-address' },
-        { key: 'matricula', placeholder: 'Matrícula', value: formData.matricula }
-      ];
-    } else if (modalType === 'turma') {
-      title = editItem ? 'Editar Turma' : 'Nova Turma';
-      fields = [
-        { key: 'nome', placeholder: 'Nome da turma', value: formData.nome },
-        { key: 'codigo', placeholder: 'Código', value: formData.codigo },
-        { key: 'periodo', placeholder: 'Período', value: formData.periodo }
-      ];
-    } else if (modalType === 'ap') {
-      title = editItem ? 'Editar Ponto de Acesso' : 'Novo Ponto de Acesso';
-      fields = [
-        { key: 'bssid', placeholder: 'BSSID (MAC)', value: formData.bssid },
-        { key: 'ssid', placeholder: 'SSID', value: formData.ssid },
-        { key: 'sala', placeholder: 'Sala', value: formData.sala },
-        { key: 'predio', placeholder: 'Prédio', value: formData.predio },
-        { key: 'ip_range', placeholder: 'IP Range', value: formData.ip_range || '10.0.0.0/8' }
-      ];
-    }
-
-    return (
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{title}</Text>
-            <ScrollView>
-              {fields.map(field => (
-                <TextInput
-                  key={field.key}
-                  style={styles.modalInput}
-                  placeholder={field.placeholder}
-                  value={field.value}
-                  onChangeText={(text) => setFormData({ ...formData, [field.key]: text })}
-                  keyboardType={field.keyboardType || 'default'}
-                />
-              ))}
-            </ScrollView>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.modalButtonCancel} onPress={() => setModalVisible(false)}>
-                <Text style={styles.modalButtonText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalButtonSave} onPress={saveItem} disabled={loading}>
-                <Text style={styles.modalButtonText}>Salvar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
-
-  const renderDashboard = () => (
-    <View style={styles.statsGrid}>
+  const renderStatsCards = () => (
+    <View style={styles.statsContainer}>
       <View style={styles.statCard}>
-        <Text style={styles.statNumber}>{stats.total_dispositivos || 0}</Text>
-        <Text style={styles.statLabel}>Alunos</Text>
+        <Text style={styles.statValue}>{stats.totalAlunos}</Text>
+        <Text style={styles.statLabel}>ALUNOS</Text>
       </View>
       <View style={styles.statCard}>
-        <Text style={styles.statNumber}>{stats.totalProfessores || 0}</Text>
-        <Text style={styles.statLabel}>Professores</Text>
+        <Text style={styles.statValue}>{stats.totalProfessores}</Text>
+        <Text style={styles.statLabel}>PROFESSORES</Text>
       </View>
       <View style={styles.statCard}>
-        <Text style={styles.statNumber}>{stats.totalTurmas || 0}</Text>
-        <Text style={styles.statLabel}>Turmas</Text>
+        <Text style={styles.statValue}>{stats.totalTurmas}</Text>
+        <Text style={styles.statLabel}>TURMAS</Text>
       </View>
       <View style={styles.statCard}>
-        <Text style={styles.statNumber}>{stats.totalAPs || 0}</Text>
-        <Text style={styles.statLabel}>APs</Text>
+        <Text style={styles.statValue}>{stats.totalAPs}</Text>
+        <Text style={styles.statLabel}>PONTOS DE ACESSO</Text>
       </View>
     </View>
   );
 
-  const renderList = (items, type, renderItem) => (
-    <FlatList
-      data={items}
-      keyExtractor={(item) => item.id.toString()}
-      renderItem={({ item }) => renderItem(item)}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      ListEmptyComponent={<Text style={styles.emptyText}>Nenhum registro encontrado</Text>}
-    />
+  const renderDashboard = () => (
+    <View>
+      {renderStatsCards()}
+    </View>
   );
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a2b4e" />
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Frequentar - Admin</Text>
-          <TouchableOpacity onPress={handleLogout}>
-            <Text style={styles.logout}>Sair</Text>
-          </TouchableOpacity>
+  const renderAlunos = () => (
+    <View style={styles.listContainer}>
+      <Text style={styles.sectionTitle}>👨‍🎓 Alunos Cadastrados</Text>
+      <Text style={styles.sectionSubtitle}>Total: {alunos.length}</Text>
+      {alunos.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>Nenhum aluno cadastrado</Text>
         </View>
+      ) : (
+        alunos.map((item) => (
+          <View key={item.id} style={styles.listItem}>
+            <View style={styles.listItemContent}>
+              <Text style={styles.listItemTitle}>{item.nome}</Text>
+              <Text style={styles.listItemSub}>{item.email}</Text>
+              <Text style={styles.listItemSub}>Matrícula: {item.matricula}</Text>
+            </View>
+            <Text style={styles.listItemBadge}>{item.turma_nome || 'Sem turma'}</Text>
+          </View>
+        ))
+      )}
+    </View>
+  );
 
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>{userName}</Text>
-          <Text style={styles.userEmail}>{userEmail}</Text>
+  const renderProfessores = () => (
+    <View style={styles.listContainer}>
+      <Text style={styles.sectionTitle}>👨‍🏫 Professores Cadastrados</Text>
+      <Text style={styles.sectionSubtitle}>Total: {professores.length}</Text>
+      {professores.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>Nenhum professor cadastrado</Text>
         </View>
+      ) : (
+        professores.map((item) => (
+          <View key={item.id} style={styles.listItem}>
+            <View style={styles.listItemContent}>
+              <Text style={styles.listItemTitle}>{item.nome}</Text>
+              <Text style={styles.listItemSub}>{item.email}</Text>
+              <Text style={styles.listItemSub}>Matrícula: {item.matricula}</Text>
+            </View>
+          </View>
+        ))
+      )}
+    </View>
+  );
 
-        <View style={styles.tabBar}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <TouchableOpacity style={[styles.tab, activeTab === 'dashboard' && styles.tabActive]} onPress={() => setActiveTab('dashboard')}>
-              <Text style={[styles.tabText, activeTab === 'dashboard' && styles.tabTextActive]}>Dashboard</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.tab, activeTab === 'alunos' && styles.tabActive]} onPress={() => setActiveTab('alunos')}>
-              <Text style={[styles.tabText, activeTab === 'alunos' && styles.tabTextActive]}>Alunos</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.tab, activeTab === 'professores' && styles.tabActive]} onPress={() => setActiveTab('professores')}>
-              <Text style={[styles.tabText, activeTab === 'professores' && styles.tabTextActive]}>Professores</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.tab, activeTab === 'turmas' && styles.tabActive]} onPress={() => setActiveTab('turmas')}>
-              <Text style={[styles.tabText, activeTab === 'turmas' && styles.tabTextActive]}>Turmas</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.tab, activeTab === 'aps' && styles.tabActive]} onPress={() => setActiveTab('aps')}>
-              <Text style={[styles.tabText, activeTab === 'aps' && styles.tabTextActive]}>APs</Text>
-            </TouchableOpacity>
-          </ScrollView>
+  const renderTurmas = () => (
+    <View style={styles.listContainer}>
+      <Text style={styles.sectionTitle}>📚 Turmas Cadastradas</Text>
+      <Text style={styles.sectionSubtitle}>Total: {turmas.length}</Text>
+      {turmas.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>Nenhuma turma cadastrada</Text>
         </View>
-
-        <ScrollView
-          style={styles.content}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          showsVerticalScrollIndicator={false}
-        >
-          {activeTab === 'dashboard' && renderDashboard()}
-
-          {activeTab === 'alunos' && (
-            <View>
-              <TouchableOpacity style={styles.addButton} onPress={() => openModal('aluno')}>
-                <Text style={styles.addButtonText}>+ Adicionar Aluno</Text>
-              </TouchableOpacity>
-              <FlatList
-                data={alunos}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={({ item }) => (
-                  <View style={styles.listItem}>
-                    <View style={styles.listItemInfo}>
-                      <Text style={styles.listItemTitle}>{item.nome}</Text>
-                      <Text style={styles.listItemSubtitle}>Matrícula: {item.matricula}</Text>
-                      <Text style={styles.listItemSubtitle}>E-mail: {item.email}</Text>
-                    </View>
-                    <View style={styles.listItemActions}>
-                      <TouchableOpacity style={styles.editButton} onPress={() => openModal('aluno', item)}>
-                        <Text style={styles.actionText}>✏️</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.deleteButton} onPress={() => deleteItem('aluno', item.id, item.nome)}>
-                        <Text style={styles.actionText}>🗑️</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-                ListEmptyComponent={<Text style={styles.emptyText}>Nenhum aluno cadastrado</Text>}
-                scrollEnabled={false}
-              />
+      ) : (
+        turmas.map((item) => (
+          <View key={item.id} style={styles.listItem}>
+            <View style={styles.listItemContent}>
+              <Text style={styles.listItemTitle}>{item.nome}</Text>
+              <Text style={styles.listItemSub}>Código: {item.codigo || '-'}</Text>
+              <Text style={styles.listItemSub}>Horário: {item.horario_inicio} - {item.horario_fim}</Text>
             </View>
-          )}
+            <Text style={styles.listItemBadge}>{item.professor_nome || 'Sem professor'}</Text>
+          </View>
+        ))
+      )}
+    </View>
+  );
 
-          {activeTab === 'professores' && (
-            <View>
-              <TouchableOpacity style={styles.addButton} onPress={() => openModal('professor')}>
-                <Text style={styles.addButtonText}>+ Adicionar Professor</Text>
-              </TouchableOpacity>
-              <FlatList
-                data={professores}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={({ item }) => (
-                  <View style={styles.listItem}>
-                    <View style={styles.listItemInfo}>
-                      <Text style={styles.listItemTitle}>{item.nome}</Text>
-                      <Text style={styles.listItemSubtitle}>Matrícula: {item.matricula}</Text>
-                      <Text style={styles.listItemSubtitle}>E-mail: {item.email}</Text>
-                    </View>
-                    <View style={styles.listItemActions}>
-                      <TouchableOpacity style={styles.editButton} onPress={() => openModal('professor', item)}>
-                        <Text style={styles.actionText}>✏️</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.deleteButton} onPress={() => deleteItem('professor', item.id, item.nome)}>
-                        <Text style={styles.actionText}>🗑️</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-                ListEmptyComponent={<Text style={styles.emptyText}>Nenhum professor cadastrado</Text>}
-                scrollEnabled={false}
-              />
+  const renderAPs = () => (
+    <View style={styles.listContainer}>
+      <Text style={styles.sectionTitle}>📡 Pontos de Acesso</Text>
+      <Text style={styles.sectionSubtitle}>Total: {aps.length}</Text>
+      {aps.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>Nenhum ponto de acesso cadastrado</Text>
+        </View>
+      ) : (
+        aps.map((item) => (
+          <View key={item.id} style={styles.listItem}>
+            <View style={styles.listItemContent}>
+              <Text style={styles.listItemTitle}>{item.ssid}</Text>
+              <Text style={styles.listItemSub}>BSSID: {item.bssid}</Text>
+              <Text style={styles.listItemSub}>Local: {item.predio} - {item.sala}</Text>
             </View>
-          )}
+            <Text style={[styles.listItemBadge, item.ativo ? styles.activeBadge : styles.inactiveBadge]}>
+              {item.ativo ? 'Ativo' : 'Inativo'}
+            </Text>
+          </View>
+        ))
+      )}
+    </View>
+  );
 
-          {activeTab === 'turmas' && (
-            <View>
-              <TouchableOpacity style={styles.addButton} onPress={() => openModal('turma')}>
-                <Text style={styles.addButtonText}>+ Adicionar Turma</Text>
-              </TouchableOpacity>
-              <FlatList
-                data={turmas}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={({ item }) => (
-                  <View style={styles.listItem}>
-                    <View style={styles.listItemInfo}>
-                      <Text style={styles.listItemTitle}>{item.nome}</Text>
-                      <Text style={styles.listItemSubtitle}>Código: {item.codigo}</Text>
-                      <Text style={styles.listItemSubtitle}>Período: {item.periodo || '-'}</Text>
-                    </View>
-                    <View style={styles.listItemActions}>
-                      <TouchableOpacity style={styles.editButton} onPress={() => openModal('turma', item)}>
-                        <Text style={styles.actionText}>✏️</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.deleteButton} onPress={() => deleteItem('turma', item.id, item.nome)}>
-                        <Text style={styles.actionText}>🗑️</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-                ListEmptyComponent={<Text style={styles.emptyText}>Nenhuma turma cadastrada</Text>}
-                scrollEnabled={false}
-              />
-            </View>
-          )}
-
-          {activeTab === 'aps' && (
-            <View>
-              <TouchableOpacity style={styles.addButton} onPress={() => openModal('ap')}>
-                <Text style={styles.addButtonText}>+ Adicionar Ponto de Acesso</Text>
-              </TouchableOpacity>
-              <FlatList
-                data={aps}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={({ item }) => (
-                  <View style={styles.listItem}>
-                    <View style={styles.listItemInfo}>
-                      <Text style={styles.listItemTitle}>{item.ssid}</Text>
-                      <Text style={styles.listItemSubtitle}>BSSID: {item.bssid}</Text>
-                      <Text style={styles.listItemSubtitle}>Sala: {item.sala}</Text>
-                      <Text style={styles.listItemSubtitle}>IP Range: {item.ip_range}</Text>
-                    </View>
-                    <View style={styles.listItemActions}>
-                      <TouchableOpacity style={styles.editButton} onPress={() => openModal('ap', item)}>
-                        <Text style={styles.actionText}>✏️</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.deleteButton} onPress={() => deleteItem('ap', item.id, item.ssid)}>
-                        <Text style={styles.actionText}>🗑️</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-                ListEmptyComponent={<Text style={styles.emptyText}>Nenhum ponto de acesso cadastrado</Text>}
-                scrollEnabled={false}
-              />
-            </View>
-          )}
-        </ScrollView>
-
-        {renderModal()}
+  const renderConfiguracoes = () => (
+    <View style={styles.configContainer}>
+      <Text style={styles.sectionTitle}>⚙️ Configurações</Text>
+      <View style={styles.configCard}>
+        <Text style={styles.configLabel}>Versão do App</Text>
+        <Text style={styles.configValue}>1.0.0</Text>
       </View>
+      <View style={styles.configCard}>
+        <Text style={styles.configLabel}>Administrador</Text>
+        <Text style={styles.configValue}>{userName}</Text>
+      </View>
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <Text style={styles.logoutButtonText}>Sair da conta</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (loading && !refreshing) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0a2b4e" />
+        <Text style={styles.loadingText}>Carregando...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#0a2b4e" />
+      
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerTitle}>Frequentar</Text>
+          <Text style={styles.headerSubtitle}>Admin, {userName}</Text>
+        </View>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutIcon}>
+          <Text style={styles.logoutIconText}>🚪</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.tabBar}>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'dashboard' && styles.activeTab]}
+          onPress={() => setActiveTab('dashboard')}
+        >
+          <Text style={[styles.tabText, activeTab === 'dashboard' && styles.activeTabText]}>Dashboard</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'alunos' && styles.activeTab]}
+          onPress={() => setActiveTab('alunos')}
+        >
+          <Text style={[styles.tabText, activeTab === 'alunos' && styles.activeTabText]}>Alunos</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'professores' && styles.activeTab]}
+          onPress={() => setActiveTab('professores')}
+        >
+          <Text style={[styles.tabText, activeTab === 'professores' && styles.activeTabText]}>Professores</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'turmas' && styles.activeTab]}
+          onPress={() => setActiveTab('turmas')}
+        >
+          <Text style={[styles.tabText, activeTab === 'turmas' && styles.activeTabText]}>Turmas</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'aps' && styles.activeTab]}
+          onPress={() => setActiveTab('aps')}
+        >
+          <Text style={[styles.tabText, activeTab === 'aps' && styles.activeTabText]}>APs</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'configuracoes' && styles.activeTab]}
+          onPress={() => setActiveTab('configuracoes')}
+        >
+          <Text style={[styles.tabText, activeTab === 'configuracoes' && styles.activeTabText]}>Config</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView 
+        style={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {activeTab === 'dashboard' && renderDashboard()}
+        {activeTab === 'alunos' && renderAlunos()}
+        {activeTab === 'professores' && renderProfessores()}
+        {activeTab === 'turmas' && renderTurmas()}
+        {activeTab === 'aps' && renderAPs()}
+        {activeTab === 'configuracoes' && renderConfiguracoes()}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#0a2b4e' },
   container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#0a2b4e' },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: 'white' },
-  logout: { color: '#c5a028', fontSize: 16 },
-  userInfo: { backgroundColor: 'white', padding: 15, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#eee' },
-  userName: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-  userEmail: { fontSize: 14, color: '#666', marginTop: 4 },
-  tabBar: { backgroundColor: 'white', elevation: 2, paddingVertical: 0 },
-  tab: { paddingHorizontal: 20, paddingVertical: 15 },
-  tabActive: { borderBottomWidth: 3, borderBottomColor: '#c5a028' },
-  tabText: { fontSize: 14, color: '#666' },
-  tabTextActive: { color: '#c5a028', fontWeight: 'bold' },
-  content: { flex: 1, padding: 15 },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  statCard: { width: '48%', backgroundColor: 'white', padding: 20, borderRadius: 12, alignItems: 'center', elevation: 2, marginBottom: 15 },
-  statNumber: { fontSize: 28, fontWeight: 'bold', color: '#0a2b4e' },
-  statLabel: { fontSize: 12, color: '#666', marginTop: 5 },
-  addButton: { backgroundColor: '#c5a028', padding: 12, borderRadius: 8, alignItems: 'center', marginBottom: 15 },
-  addButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
-  listItem: { backgroundColor: 'white', borderRadius: 10, padding: 15, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 1 },
-  listItemInfo: { flex: 1 },
-  listItemTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-  listItemSubtitle: { fontSize: 12, color: '#666', marginTop: 2 },
-  listItemActions: { flexDirection: 'row', gap: 10 },
-  editButton: { padding: 8, backgroundColor: '#2196F3', borderRadius: 8 },
-  deleteButton: { padding: 8, backgroundColor: '#f44336', borderRadius: 8 },
-  actionText: { fontSize: 16 },
-  emptyText: { textAlign: 'center', color: '#999', padding: 40 },
-  modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalContent: { backgroundColor: 'white', borderRadius: 12, padding: 20, width: '90%', maxHeight: '80%' },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
-  modalInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 15, fontSize: 16 },
-  modalButtons: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  modalButtonCancel: { flex: 1, backgroundColor: '#999', padding: 12, borderRadius: 8, alignItems: 'center' },
-  modalButtonSave: { flex: 1, backgroundColor: '#c5a028', padding: 12, borderRadius: 8, alignItems: 'center' },
-  modalButtonText: { color: 'white', fontWeight: 'bold' }
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' },
+  loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
+  header: { backgroundColor: '#0a2b4e', paddingHorizontal: 20, paddingTop: 50, paddingBottom: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
+  headerSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+  logoutIcon: { padding: 8 },
+  logoutIconText: { fontSize: 24 },
+  tabBar: { flexDirection: 'row', flexWrap: 'wrap', backgroundColor: '#fff', paddingVertical: 10, elevation: 2 },
+  tab: { paddingHorizontal: 12, paddingVertical: 8, marginHorizontal: 2 },
+  activeTab: { borderBottomWidth: 2, borderBottomColor: '#0a2b4e' },
+  tabText: { fontSize: 12, color: '#666' },
+  activeTabText: { color: '#0a2b4e', fontWeight: 'bold' },
+  content: { flex: 1, padding: 16 },
+  statsContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 20 },
+  statCard: { width: '48%', backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 10, alignItems: 'center', elevation: 2 },
+  statValue: { fontSize: 32, fontWeight: 'bold', color: '#0a2b4e' },
+  statLabel: { fontSize: 12, color: '#666', marginTop: 4, fontWeight: '500' },
+  listContainer: { flex: 1, marginBottom: 20 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 4 },
+  sectionSubtitle: { fontSize: 14, color: '#666', marginBottom: 16 },
+  listItem: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 1 },
+  listItemContent: { flex: 1 },
+  listItemTitle: { fontSize: 14, fontWeight: 'bold', color: '#333' },
+  listItemSub: { fontSize: 12, color: '#666', marginTop: 2 },
+  listItemBadge: { fontSize: 11, color: '#0a2b4e', backgroundColor: '#e8f4f8', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, fontWeight: 'bold' },
+  activeBadge: { color: '#4CAF50', backgroundColor: '#e8f5e9' },
+  inactiveBadge: { color: '#F44336', backgroundColor: '#ffebee' },
+  emptyCard: { backgroundColor: '#fff', borderRadius: 12, padding: 30, alignItems: 'center' },
+  emptyText: { fontSize: 14, color: '#999' },
+  configContainer: { flex: 1 },
+  configCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  configLabel: { fontSize: 14, color: '#666' },
+  configValue: { fontSize: 14, fontWeight: 'bold', color: '#333' },
+  logoutButton: { backgroundColor: '#F44336', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 16 },
+  logoutButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 });

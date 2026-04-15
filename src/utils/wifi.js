@@ -18,7 +18,6 @@ export const getDeviceId = async () => {
     return FIXED_DEVICE_ID;
 };
 
-// Solicitar permissão apenas uma vez
 export const solicitarPermissaoLocalizacao = async () => {
     if (permissaoLocalizacaoConcedida) {
         return true;
@@ -39,25 +38,28 @@ export const getRedesAutorizadas = async (forceRefresh = false) => {
     try {
         const agora = Date.now();
         if (!forceRefresh && redesAutorizadasCache && (agora - ultimaConsultaCache) < TEMPO_CACHE) {
+            console.log('📡 Usando cache de redes autorizadas:', redesAutorizadasCache.length);
             return redesAutorizadasCache;
         }
-        console.log('📡 Carregando redes autorizadas...');
+        console.log('📡 Buscando redes autorizadas no backend...');
         const redes = await api.getRedesAutorizadas();
         redesAutorizadasCache = redes;
         ultimaConsultaCache = agora;
-        console.log(`✅ ${redes.length} rede(s) autorizada(s) carregada(s)`);
+        console.log(`✅ ${redes.length} rede(s) autorizada(s) carregada(s) do backend`);
+        redes.forEach(rede => {
+            console.log(`   - ${rede.ssid} (${rede.bssid}) - ${rede.predio}/${rede.sala}`);
+        });
         return redes;
     } catch (error) {
-        console.log('⚠️ Erro ao carregar redes autorizadas');
+        console.log('⚠️ Erro ao carregar redes autorizadas:', error);
         return redesAutorizadasCache || [];
     }
 };
 
 export const getWifiInfo = async () => {
     try {
-        // Verifica permissão sem solicitar novamente
         if (!permissaoLocalizacaoConcedida) {
-            console.log('📡 Permissão de localização negada - não é possível ler Wi-Fi');
+            console.log('📡 Permissão de localização negada');
             return null;
         }
         
@@ -68,19 +70,54 @@ export const getWifiInfo = async () => {
             return null;
         }
         
+        let ssid = netInfo.details?.ssid?.replace(/^"|"$/g, '') || null;
+        let bssid = netInfo.details?.bssid || null;
+        
+        console.log(`📡 Wi-Fi detectado: SSID="${ssid}", BSSID="${bssid}"`);
+        
         return {
-            ssid: netInfo.details?.ssid?.replace(/^"|"$/g, '') || null,
-            bssid: netInfo.details?.bssid?.toLowerCase() || null,
+            ssid: ssid,
+            bssid: bssid,
             ip: netInfo.details?.ipAddress || null,
             isConnected: true
         };
     } catch (error) {
-        console.log('⚠️ Erro ao ler informações do Wi-Fi');
+        console.log('⚠️ Erro ao ler Wi-Fi:', error);
         return null;
     }
 };
 
-// ÚNICA tentativa de registro
+// Validar rede atual contra as autorizadas do backend
+export const validarRedeAtual = async (wifiInfo, redesAutorizadas) => {
+    if (!wifiInfo || !wifiInfo.ssid) {
+        return {
+            valida: false,
+            message: 'Não foi possível identificar a rede Wi-Fi',
+            rede: null
+        };
+    }
+    
+    // Buscar por SSID ou BSSID (case insensitive)
+    const redeAutorizada = redesAutorizadas.find(rede => 
+        rede.ssid?.toLowerCase() === wifiInfo.ssid?.toLowerCase() ||
+        rede.bssid?.toLowerCase() === wifiInfo.bssid?.toLowerCase()
+    );
+    
+    if (redeAutorizada) {
+        return {
+            valida: true,
+            message: `✅ Rede autorizada: ${redeAutorizada.ssid} (${redeAutorizada.predio} - ${redeAutorizada.sala})`,
+            rede: redeAutorizada
+        };
+    }
+    
+    return {
+        valida: false,
+        message: '❌ Rede Wi-Fi não autorizada. Conecte-se à rede oficial da escola.',
+        rede: null
+    };
+};
+
 export const tentarRegistrarPresenca = async (callback) => {
     if (jaTentouRegistrar) {
         console.log('⏸️ Registro já foi tentado nesta sessão');
@@ -91,21 +128,21 @@ export const tentarRegistrarPresenca = async (callback) => {
     console.log('🔄 Verificando condições para registro de presença...');
     
     const wifiInfo = await getWifiInfo();
-    if (!wifiInfo || !wifiInfo.bssid) {
+    if (!wifiInfo || !wifiInfo.ssid) {
         console.log('❌ Sem conexão Wi-Fi - registro não realizado');
         return false;
     }
     
-    console.log(`📡 Conectado à rede: ${wifiInfo.ssid}`);
+    console.log(`📡 Conectado à rede: ${wifiInfo.ssid} (${wifiInfo.bssid})`);
     
     const redes = await getRedesAutorizadas();
-    const redeValida = redes.some(r => r.bssid?.toLowerCase() === wifiInfo.bssid?.toLowerCase());
+    const validacao = await validarRedeAtual(wifiInfo, redes);
     
-    if (!redeValida) {
+    if (!validacao.valida) {
         console.log('❌ Rede não autorizada - registro não realizado');
         if (callback && !jaMostrouPopUp) {
             jaMostrouPopUp = true;
-            callback({ type: 'rede', message: 'Rede Wi-Fi não autorizada. Conecte-se à rede da escola.' });
+            callback({ type: 'rede', message: validacao.message });
         }
         return false;
     }
@@ -142,7 +179,7 @@ export const tentarRegistrarPresenca = async (callback) => {
                 callback({ type: 'horario', message: '⏰ Fora do horário de aula (08:00 às 12:00)' });
             }
         } else {
-            console.log('⚠️ Erro ao registrar presença');
+            console.log('⚠️ Erro ao registrar presença:', error.message);
             if (callback && !jaMostrouPopUp) {
                 jaMostrouPopUp = true;
                 callback({ type: 'error', message: 'Erro ao registrar presença. Tente novamente.' });
@@ -152,30 +189,28 @@ export const tentarRegistrarPresenca = async (callback) => {
     }
 };
 
-// Reset diário
 export const resetarTentativaDiaria = () => {
     console.log('🔄 Reset diário - novas tentativas liberadas');
     jaTentouRegistrar = false;
     jaMostrouPopUp = false;
 };
 
-// Verificar status da rede (apenas visual)
 export const verificarStatusRede = async () => {
     const wifiInfo = await getWifiInfo();
-    if (!wifiInfo || !wifiInfo.bssid) {
+    if (!wifiInfo || !wifiInfo.ssid) {
         return { conectado: false, valida: false, message: 'Sem conexão Wi-Fi' };
     }
     const redes = await getRedesAutorizadas();
-    const redeValida = redes.some(r => r.bssid?.toLowerCase() === wifiInfo.bssid?.toLowerCase());
+    const validacao = await validarRedeAtual(wifiInfo, redes);
     return {
         conectado: true,
-        valida: redeValida,
-        message: redeValida ? '✅ Conectado à rede autorizada' : '❌ Rede não autorizada',
-        redeAtual: wifiInfo
+        valida: validacao.valida,
+        message: validacao.message,
+        redeAtual: wifiInfo,
+        rede: validacao.rede
     };
 };
 
-// Monitoramento apenas visual
 export const startWifiMonitoring = (callback, interval = 30000) => {
     let intervalId = null;
     const checkWifi = async () => {
