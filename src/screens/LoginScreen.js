@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
+import { getDeviceId } from '../utils/wifi';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('admin@escola.com');
@@ -22,30 +23,33 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Erro', 'Preencha e-mail e senha');
-      return;
+        Alert.alert('Erro', 'Preencha todos os campos');
+        return;
     }
 
     setLoading(true);
     try {
-      const data = await api.login(email, password, perfil);
-      
-      await AsyncStorage.setItem('token', data.token);
-      await AsyncStorage.setItem('usuario', JSON.stringify(data.usuario));
-      
-      if (data.usuario.perfil === 'admin') {
-        navigation.replace('Admin');
-      } else if (data.usuario.perfil === 'professor') {
-        navigation.replace('Professor');
-      } else {
-        navigation.replace('Aluno');
-      }
+        const deviceId = await getDeviceId();
+        const response = await api.login(email, password, perfil, deviceId);
+        
+        if (response.token) {
+            await AsyncStorage.setItem('token', response.token);
+            await AsyncStorage.setItem('user', JSON.stringify(response.usuario));
+            
+            if (perfil === 'admin') {
+                navigation.replace('Admin');
+            } else if (perfil === 'professor') {
+                navigation.replace('Professor');
+            } else {
+                navigation.replace('Aluno');
+            }
+        }
     } catch (error) {
-      Alert.alert('Erro', error.message);
+        Alert.alert('Erro', error.message || 'Falha no login');
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+};
 
   return (
     <KeyboardAvoidingView

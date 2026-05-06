@@ -46,10 +46,10 @@ const request = async (endpoint, options = {}) => {
 
 export const api = {
   // Autenticação
-  login: (email, password, perfil) => 
+  login: (email, password, perfil, mac_address) => 
     request('/login-multi', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, perfil })
+        method: 'POST',
+        body: JSON.stringify({ email, password, perfil, mac_address })
     }),
   
   // Dashboard público
