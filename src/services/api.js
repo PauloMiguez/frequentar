@@ -48,8 +48,8 @@ export const api = {
   // Autenticação
   login: (email, password, perfil, mac_address) => 
     request('/login-multi', {
-        method: 'POST',
-        body: JSON.stringify({ email, password, perfil, mac_address })
+      method: 'POST',
+      body: JSON.stringify({ email, password, perfil, mac_address })
     }),
   
   // Dashboard público
@@ -77,6 +77,7 @@ export const api = {
   // Admin - Pontos de Acesso
   getAPs: () => request('/admin/aps'),
   createAP: (data) => request('/admin/aps', { method: 'POST', body: JSON.stringify(data) }),
+  updateAP: (id, data) => request(`/admin/aps/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   
   // Professor
   getProfessorTurmas: () => request('/professor/turmas'),
@@ -102,7 +103,7 @@ export const api = {
   getRedesAutorizadas: () => request('/wifi/redes-autorizadas'),
   
   // Validar rede específica
-    validarRede: (ssid, bssid) => request('/wifi/validar-rede', {
+  validarRede: (ssid, bssid) => request('/wifi/validar-rede', {
     method: 'POST',
     body: JSON.stringify({ ssid, bssid })
   }),
@@ -110,17 +111,7 @@ export const api = {
   // Perfil
   updatePerfil: (data) => request('/usuarios/perfil', { method: 'PUT', body: JSON.stringify(data) }),
   
-  getPerfil: () => request('/usuarios/perfil'),
-  
-  // Admin - APs (update)
-  updateAP: (id, data) => request(`/admin/aps/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+  getPerfil: () => request('/usuarios/perfil')
 };
 
 export default api;
-
-  // Modificar a função login para aceitar mac_address
-  login: (email, password, perfil, mac_address) => 
-    request('/login-multi', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, perfil, mac_address })
-    }),

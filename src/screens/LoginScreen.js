@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Image,
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
@@ -69,11 +68,6 @@ export default function LoginScreen({ navigation }) {
         style={styles.keyboardView}
       >
         <View style={styles.logoContainer}>
-          <Image
-            source={require('../assets/images/logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
           <Text style={styles.title}>Frequentar</Text>
           <Text style={styles.subtitle}>Sistema de Presença por Wi-Fi</Text>
         </View>
@@ -151,13 +145,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  logo: {
-    width: 120,
-    height: 120,
-    marginBottom: 20,
-  },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 8,
