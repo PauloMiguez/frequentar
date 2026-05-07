@@ -117,3 +117,10 @@ export const api = {
 };
 
 export default api;
+
+  // Modificar a função login para aceitar mac_address
+  login: (email, password, perfil, mac_address) => 
+    request('/login-multi', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, perfil, mac_address })
+    }),
