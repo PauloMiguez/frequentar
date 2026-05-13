@@ -3,8 +3,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import api from '../services/api';
 
-const FIXED_DEVICE_ID = 'device_aluno_3_1775738624986';
-
 let redesAutorizadasCache = null;
 let ultimaConsultaCache = null;
 const TEMPO_CACHE = 5 * 60 * 1000;
@@ -15,7 +13,20 @@ let jaMostrouPopUp = false;
 let permissaoLocalizacaoConcedida = false;
 
 export const getDeviceId = async () => {
-    return FIXED_DEVICE_ID;
+    try {
+        let deviceId = await AsyncStorage.getItem('deviceId');
+        if (!deviceId) {
+            deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10);
+            await AsyncStorage.setItem('deviceId', deviceId);
+            console.log('📱 Novo Device ID gerado:', deviceId);
+        } else {
+            console.log('📱 Device ID existente:', deviceId);
+        }
+        return deviceId;
+    } catch (error) {
+        console.error('Erro ao obter deviceId:', error);
+        return 'device_fallback_' + Date.now();
+    }
 };
 
 export const solicitarPermissaoLocalizacao = async () => {
@@ -119,11 +130,7 @@ export const validarRedeAtual = async (wifiInfo, redesAutorizadas) => {
 };
 
 export const tentarRegistrarPresenca = async (callback) => {
-    if (jaTentouRegistrar) {
-        console.log('⏸️ Registro já foi tentado nesta sessão');
-        return false;
-    }
-    
+        
     jaTentouRegistrar = true;
     console.log('🔄 Verificando condições para registro de presença...');
     
@@ -151,7 +158,7 @@ export const tentarRegistrarPresenca = async (callback) => {
     
     try {
         const result = await api.registrarPresencaAuto({
-            mac_address: FIXED_DEVICE_ID,
+            mac_address: await getDeviceId(),
             ssid: wifiInfo.ssid,
             bssid: wifiInfo.bssid,
             client_ip: wifiInfo.ip
